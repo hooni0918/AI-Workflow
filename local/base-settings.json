@@ -1,0 +1,10 @@
+{
+  "hooks": [
+    {
+      "file": "block_ac_sync.py",
+      "event": "PreToolUse",
+      "on": "bash",
+      "msg": "Checking for sync:* commands..."
+    }
+  ]
+}
