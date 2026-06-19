@@ -1,0 +1,14 @@
+# Claude/Codex 배포 산출물·로컬 설정·워크트리 (소스는 local/·deploy/, 트래킹 안 함)
+.claude/
+.codex/
+.idea
+node_modules
+coverage
+.agents/
+AGENTS.md
+GEMINI.md
+.antigravitycli/
+nul
+__pycache__/
+*.pyc
+bench/
