@@ -56,7 +56,7 @@ AI 코드 리뷰(6.2) + 사용자 코드 리뷰(6.3) 통과 후, 사용자가 PR
 
 양식: `- [ ] <시나리오>: <조건>일 때 <기대 동작>`
 
-Lead는 변경분을 훑어 TC 추출 → 파일 작성 후 사용자에게 경로 + 테스트 진입 방법(시뮬레이터 빌드·실행 — [conventions/tuist.md](../conventions/tuist.md)의 `tuist xcodebuild build`) 안내. 사용자 실패 발견 시 수정 지시 → Implementer 처리 → 다시 6.2부터.
+Lead는 변경분을 훑어 TC 추출 → 파일 작성 후 사용자에게 경로 + 테스트 진입 방법(시뮬레이터 빌드·실행 — [conventions/spm.md](../conventions/spm.md)의 `xcodebuild build`) 안내. 사용자 실패 발견 시 수정 지시 → Implementer 처리 → 다시 6.2부터.
 
 step-7에서 PR 본문 Test plan으로 재활용 후 파일 정리한다.
 
