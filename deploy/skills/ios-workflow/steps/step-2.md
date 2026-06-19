@@ -16,10 +16,10 @@
 ## PR 분할 원칙
 
 - **한 번에 하나의 PR, 하나의 구체적인 기능**만 다룹니다.
-- **의존성 순서**: 공통 모듈 → 개별 화면. iOS 모듈 레이어가 있으면 레이어 의존 방향(단방향)을 따른다 — Feature → Domain → Data 식. 레이어 역방향 의존이 생기지 않도록 분할 ([conventions/tuist.md](../conventions/tuist.md) 「tuist graph」가 검증 도구).
+- **의존성 순서**: 공통 모듈 → 개별 화면. iOS 모듈 레이어가 있으면 레이어 의존 방향(단방향)을 따른다 — Feature → Domain → Data 식. 레이어 역방향 의존이 생기지 않도록 분할 (spm-module/conventions/deps-verify.md 의 Package.swift dependencies grep 대조가 검증 도구).
 - **기술적 과제는 다음 단계에서** — 이 단계는 PR 분할에만 집중
 - **stub 시점부터 병렬**: `PR_{N}_PLAN.step-4` 종료 시점에 stub 커밋이 외부 시그니처(public/internal API)를 확정하면, PR_{N+1}_PLAN과 PR_{N}_IMPL을 동시 spawn 가능
-- **인프라성 PR → 순차**: SPM/Tuist 의존성 추가·모듈 셋업 등은 stub 시점 병렬 효과가 작으므로 순차 (이전 PR 머지 후 다음 PR_{N+1}_PLAN spawn). 단 "인프라성이라 stub 불필요"는 디폴트가 아니다 — 의존성·설정·`it.todo`가 코드로 표현 가능하면 stub 대상 (step-4 참조)
+- **인프라성 PR → 순차**: SPM 의존성 추가·모듈 셋업 등은 stub 시점 병렬 효과가 작으므로 순차 (이전 PR 머지 후 다음 PR_{N+1}_PLAN spawn). 단 "인프라성이라 stub 불필요"는 디폴트가 아니다 — 의존성·설정·`it.todo`가 코드로 표현 가능하면 stub 대상 (step-4 참조)
 
 ---
 
