@@ -36,7 +36,7 @@ argument-hint: "[PR URL 또는 브랜치] [--coding-standards 경로...] [--extr
 coding-standards 목록이 주입된 경우, **외부 스킬 선별(4번)을 제외한 나머지를 건너뛴다** (호출자가 이미 스탠다드를 정했으므로 재선별 불필요). 4번은 리뷰 대상 도메인 기준이라 coding-standards 주입 여부와 무관하게 항상 실행한다 — only-standards 모드는 어차피 3단계에서 자유 리뷰·외부 스킬 리뷰어를 실행하지 않으므로 좁은 스코프가 유지된다.
 
 1. 사용자에게 **리뷰 대상**을 확인받는다
-2. [coding-standards/map.md](../../contexts/coding-standards/map.md)를 읽고, 탐색 절차를 따라 관련 rules·principles 파일을 선별·로드한다 (Swift · SwiftUI · Coordinator · Tuist 기준)
+2. [coding-standards/map.md](../../contexts/coding-standards/map.md)를 읽고, 탐색 절차를 따라 관련 rules·principles 파일을 선별·로드한다 (Swift · UIKit · Clean Architecture/DDD · SPM 기준)
 3. 리뷰 대상이 기존 코드베이스 위에서 도는 작업이면, 같은 역할을 하는 기존 구현 패턴(ViewModel 구조, 네트워크 레이어, 재사용 View, Coordinator 구성 등)을 코드베이스에서 직접 탐색해 참조한다. 관련 패턴이 있으면 그 스타일을 리뷰 기준에 함께 반영한다
 4. 리뷰 대상 영역에 해당하는 **외부 베스트 프랙티스 스킬**이 설치돼 있으면 추가 컨텍스트로 로드한다 (메인은 Skill tool로 호출. 서브에이전트에 넘길 때는 메인이 형제 스킬 `../<name>/SKILL.md`를 읽어 그 내용을 전달한다). 우리 `coding-standards/`와 권고가 다른 항목이 있으면 사용자에게 보고한다 — 어느 쪽을 따를지 사용자가 결정한다.
 
