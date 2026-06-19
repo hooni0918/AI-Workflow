@@ -35,7 +35,7 @@ overview.md를 **단일 작업 캔버스**로 쓴다. 기술 선택에서 여러
 
 - AI는 결정 후보를 나열하고 각 후보 옆에 비어 있는 trade-off 칸(유리한 축 / 불리한 축)만 만든 뒤 "이 결정의 trade-off를 적어 주십시오"라고 질문한다. AI가 임의로 trade-off를 채우지 않는다.
 - 사용자가 채운 trade-off 위에서 AI는 빠진 축·과장된 축을 검증·보강한다.
-- iOS 기술 선택 예: `@Observable`(iOS 17+) vs `ObservableObject`+`@Published`, NavigationStack vs 기존 라우팅, async/await vs Combine, actor 격리 모델 등.
+- iOS 기술 선택 예: `UITableView` vs `UICollectionView`, present vs push, 동기 vs async/await, async/await vs Combine, actor 격리 모델 등.
 
 step-3 종료 직전 각 갈래를 분배한다:
 
