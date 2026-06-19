@@ -1,5 +1,7 @@
 # Coordinator 아키텍처 원칙
 
+> **현재 미채택** — MINO는 Clean Architecture + DDD(UIKit)를 쓰며 Coordinator를 도입하지 않았다. 아래는 향후 Coordinator 도입 시에만 적용한다. 현재 아키텍처 근거는 [clean-architecture.md](clean-architecture.md)가 담당한다.
+
 화면 전환의 책임을 `View`에서 분리해 Coordinator에 모으는 이유와 그 경계 판단을 다룬다. 기계 대조 가능한 "~해라/~금지"는 [rules/personal/coordinator/navigation.md](../../../rules/personal/coordinator/navigation.md)가 담당한다.
 
 ## 왜 전환을 View에서 떼어내는가

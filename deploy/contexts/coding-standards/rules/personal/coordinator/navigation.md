@@ -1,5 +1,7 @@
 # Coordinator 화면 전환 규칙
 
+> **현재 미채택** — MINO는 Clean Architecture + DDD(UIKit)를 쓰며 Coordinator를 도입하지 않았다. 아래 규칙은 향후 Coordinator 도입 시에만 적용한다. 현재 레이어 경계는 [clean-architecture/layer-rules.md](../clean-architecture/layer-rules.md)가 단일 출처다.
+
 화면 전환의 책임을 `View`에서 분리해 Coordinator에 모은다. 판단 근거·트레이드오프는 [principles/personal/architecture/coordinator.md](../../../principles/personal/architecture/coordinator.md)가 담당하고, 이 문서는 기계 대조 가능한 "~해라/~금지" 규칙만 둔다.
 
 ## View는 전환을 직접 수행하지 않는다
