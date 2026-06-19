@@ -16,7 +16,7 @@ Coordinator는 "이 플로우에서 화면들이 어떤 순서·조건으로 이
 
 ## 의존 방향의 비대칭이 핵심
 
-`View → Coordinator`는 허용, `Coordinator → 구체 View`는 금지다(navigation.md). 이 비대칭이 깨지면 — Coordinator가 화면마다 구체 `View`를 알면 — Coordinator가 모든 화면의 허브가 되어 화면이 늘 때마다 비대해지고, Tuist 모듈로 쪼갤 때 Feature 모듈끼리 Coordinator를 통해 간접 결합된다. Coordinator는 **Route라는 추상**까지만 알고, Route를 실제 `View`로 만드는 책임은 팩토리 한 곳에 둔다.
+`View → Coordinator`는 허용, `Coordinator → 구체 View`는 금지다(navigation.md). 이 비대칭이 깨지면 — Coordinator가 화면마다 구체 `View`를 알면 — Coordinator가 모든 화면의 허브가 되어 화면이 늘 때마다 비대해지고, 모듈로 쪼갤 때 Feature 모듈끼리 Coordinator를 통해 간접 결합된다. Coordinator는 **Route라는 추상**까지만 알고, Route를 실제 `View`로 만드는 책임은 팩토리 한 곳에 둔다.
 
 > 이 의존 방향 결함은 "Coordinator는 구체 View를 몰라야 한다"는 규칙을 알아야 보인다. 코드만 보면 평범한 `import`로 보이므로, 리뷰·인계에서 지적할 때는 위배된 규칙(의존 방향)을 함께 명시한다.
 

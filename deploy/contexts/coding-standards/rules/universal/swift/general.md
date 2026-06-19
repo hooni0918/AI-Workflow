@@ -41,7 +41,7 @@ guard let data = try? Data(contentsOf: fileURL) else { return nil }
 
 ## 접근제어 명시
 
-타입·프로퍼티·메서드의 접근제어를 의도에 맞게 명시한다. 모듈 경계를 넘어 노출할 것만 `public`/`package`, 그 외는 `internal`(생략 가능) 또는 `private`/`fileprivate`로 좁힌다. 기본 `internal`에 의존해 모든 것을 열어 두지 않는다 — 모듈의 공개 계약이 흐려지면 Tuist 레이어 경계(아래 「모듈화」 참조)가 의미를 잃는다.
+타입·프로퍼티·메서드의 접근제어를 의도에 맞게 명시한다. 모듈 경계를 넘어 노출할 것만 `public`/`package`, 그 외는 `internal`(생략 가능) 또는 `private`/`fileprivate`로 좁힌다. 기본 `internal`에 의존해 모든 것을 열어 두지 않는다 — 모듈의 공개 계약이 흐려지면 모듈 레이어 경계(아래 「모듈화」 참조)가 의미를 잃는다.
 
 - **기계 대조**: SwiftLint `explicit_acl`·`explicit_top_level_acl` 룰(opt-in). 모듈이 라이브러리로 노출되는 경우 켠다.
 - **가정**: 어떤 룰을 켜는지는 프로젝트 `.swiftlint.yml` 실측 후 확정. 위 룰명은 SwiftLint 표준 룰 기준.
