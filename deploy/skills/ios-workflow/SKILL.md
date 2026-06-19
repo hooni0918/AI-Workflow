@@ -8,7 +8,7 @@ argument-hint: <세션 이름> <실무|개인>
 
 ## 목적
 
-기획서, 디자인 시안, 버그 리포트를 iOS(Swift / SwiftUI) PR로 변환한다.
+기획서, 디자인 시안, 버그 리포트를 iOS(Swift / UIKit) PR로 변환한다.
 
 이 워크플로우의 목표는 작업을 가능한 한 병렬로 돌려 병목을 없애는 것이다. 다음 PR 설계와 현재 PR 구현을 겹치고(PR 도미노), 화면 마크업을 PR 작업과 병행하며, 리뷰어를 종류별로 나눠 동시에 돌리는 것이 그 장치다.
 
@@ -32,7 +32,7 @@ BG가 후속 세션 spawn 안내를 출력할 때 동일 모드 인자를 그대
 | 세션 | (1) 진입 조건 | (2) 입력 컨텍스트 | (3) 출력 산출물 + 라이프사이클 폴더 | (4) 후속 트리거 | (5) 컨텍스트 처리 | (6) 권장 모델 |
 |---|---|---|---|---|---|---|
 | **BG** | `/ios-workflow BG <모드>` 호출 (유일 루트) | 사용자 제공 자료 (기획서·요구사항·버그 리포트) | `background/persistent/`: 원본 자료 / `background/retained/`: tech-constraints.md·conventions-index.md / `background/consumable/`: project.md / `pr{N}/consumable/`: screen.md (화면별 분석) | step-1.1 후 → MARKUP, 동일 `<모드>` 인자 / step-2 후 → PR_1_PLAN, 동일 `<모드>` 인자 | 컨텍스트 격리. 세션 종료 시 산출물 자가 검토 | **Opus** — PR 분할이 전 세션의 루트 결정, 오판이 도미노로 전파 |
-| **MARKUP** | BG.step-1.1 후, `/ios-workflow MARKUP <모드>` 호출 | (실무) step-1.1 수집 figma·시안 자료 / (개인) 공동 정의 기획 md — 화면·섹션·뷰·컴포넌트 단위 | **디자인 진실 원천 0건 완성 SwiftUI 마크업 코드(`*View.swift`)** (메인 산출물) + 입력: (실무) `background/retained/figma-url.md`·`figma/` / (개인) 공동 정의 기획 md | 없음 (PR_{N}_IMPL이 화면 단위 마크업 코드를 그대로 가져감) | 마크업 워크트리 | **Sonnet** (figma URL 기준) / **Opus** (캡처-only·개인) — URL은 노드값이 정답이라 결정론적 번역, 캡처·개인은 디자인을 픽셀/의도에서 역추론 + 자기증명 루프 위험 |
+| **MARKUP** | BG.step-1.1 후, `/ios-workflow MARKUP <모드>` 호출 | (실무) step-1.1 수집 figma·시안 자료 / (개인) 공동 정의 기획 md — 화면·섹션·뷰·컴포넌트 단위 | **디자인 진실 원천 0건 완성 UIKit 마크업(UIViewController+AutoLayout) 코드(`*ViewController.swift`)** (메인 산출물) + 입력: (실무) `background/retained/figma-url.md`·`figma/` / (개인) 공동 정의 기획 md | 없음 (PR_{N}_IMPL이 화면 단위 마크업 코드를 그대로 가져감) | 마크업 워크트리 | **Sonnet** (figma URL 기준) / **Opus** (캡처-only·개인) — URL은 노드값이 정답이라 결정론적 번역, 캡처·개인은 디자인을 픽셀/의도에서 역추론 + 자기증명 루프 위험 |
 | **PR_{N}_PLAN** | (N=1) BG.step-2 / (N≥2) BG.step-2 + (PR_{N-1}이 stub 만든 경우) PR_{N-1}.step-4 stub, 안 만든 경우 PR_{N-1} 머지 | `background/consumable/project.md` 해당 PR 섹션 + BG 산출물 + 이전 PR `persistent/` | `pr{N}/persistent/`: decisions.md, reference.md, **implementation.md** / `pr{N}/retained/`: markup.md (UI 컴포넌트 PR만, 개인 제외) / `pr{N}/consumable/`: overview.md | step-4 stub 만든 경우 → PR_{N+1}_PLAN + PR_{N}_IMPL 동시 spawn / stub 안 만든 경우 → PR_{N}_IMPL만 spawn | PR_{N} 워크트리. 학습 인수인계 후 진입 대기 적용 | **Opus** — stub 시그니처가 다음 PR의 공개 계약, 오판 시 도미노 오염 |
 | **PR_{N}_IMPL** | PR_{N}_PLAN.step-4 종료 (필수) + (화면 코드 포함 PR이면) MARKUP의 해당 화면 코드 (필수) + (PR_{N-1}이 stub 만든 경우) PR_{N-1} stub 시그니처 확정 (필수) | implementation.md, markup.md, MARKUP 화면 코드, decisions·reference | 코드 변경 + 커밋 (로직 stub 위에 본체 채움; 마크업은 MARKUP 완성본 import) / `pr{N}/consumable/`: review.md, user-test-cases.md | step-5 끝 후 → PR_{N}_WRITING | PR_{N} 워크트리. 본 PR 하나에 집중 | **Sonnet** (PLAN이 방침 확정 시) — PLAN이 알고리즘 판단을 미뤘으면 Opus |
 | **PR_{N}_WRITING** | PR_{N}_IMPL.step-5 종료 | implementation.md + 커밋 로그 + decisions.md + reference.md + `pr{N}/consumable/` 잔여 산출물 | `pr{N}/consumable/pr-body.md` (작성 후 PR 본문 복사 → 폐기) / overview.md 폐기 / `pr{N}/persistent/`는 제외 (영구 보존) | step-7 끝 후 → PR_{N} 머지 안내. 머지 후 PR_{N+1}_PLAN spawn 안내 (PR_{N}이 stub 안 만든 경우) | 구현 맥락 없이 파일 기반으로 PR 본문 작성 | **Opus** — 구현 맥락 없이 파일만 보고 사용자 의도를 추론, 의도 오독 비용 큼 |
@@ -130,7 +130,7 @@ AI 산출물의 역할은 **Implementer 캐시·인덱스**로만 한정한다. 
 
 적용 사례:
 - MARKUP의 Figma Reviewer는 `figma-url.md`의 URL로 figma 원본을 직접 fetch해 마크업과 대조 (매칭표는 캐시 보조). 개인 모드는 figma가 없어 사용자 시각 확인이 진실 원천
-- 로직 검증의 진실 원천은 테스트 실행 결과 (`tuist test` — [conventions/tuist.md](conventions/tuist.md))
+- 로직 검증의 진실 원천은 테스트 실행 결과 (swift test/xcodebuild test — [conventions/spm.md](conventions/spm.md))
 - Coding-Standards Reviewer는 컨벤션 1차 소스 파일을 직접 읽음 (`reference.md`는 경로 인덱스 역할). SwiftLint는 기계 판정으로 `swiftlint lint --strict` 직접 실행
 
 ### step 진입 시퀀스
