@@ -1,0 +1,52 @@
+{
+  "hooks": [
+    {
+      "file": "auto_stage_new_file.py",
+      "event": "PostToolUse",
+      "on": "write",
+      "msg": "Auto-staging new file..."
+    },
+    {
+      "file": "surface_backlog.py",
+      "event": "UserPromptSubmit",
+      "on": "prompt",
+      "msg": "Surfacing related backlog..."
+    },
+    {
+      "file": "surface_claude_md.py",
+      "event": "PreToolUse",
+      "on": "search",
+      "msg": "Surfacing folder CLAUDE.md..."
+    },
+    {
+      "file": "check_shell_policy.py",
+      "event": "PreToolUse",
+      "on": "bash",
+      "msg": "Checking shell policy..."
+    },
+    {
+      "file": "check_git_staging_policy.py",
+      "event": "PreToolUse",
+      "on": "bash",
+      "msg": "Checking git staging policy..."
+    },
+    {
+      "file": "check_git_commit_policy.py",
+      "event": "PreToolUse",
+      "on": "bash",
+      "msg": "Checking git commit policy..."
+    },
+    {
+      "file": "check_git_push_policy.py",
+      "event": "PreToolUse",
+      "on": "bash",
+      "msg": "Checking git push policy..."
+    },
+    {
+      "file": "check_team_message_policy.py",
+      "event": "PreToolUse",
+      "on": "message",
+      "msg": "Checking team message policy..."
+    }
+  ]
+}
