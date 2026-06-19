@@ -80,4 +80,4 @@ contexts/
 
 - md 파일을 작성하거나 수정할 때, 한 문장이 한 가지 역할(규칙·사례·트리거)만 담도록 분리합니다.
 - 진입점·인덱스 문서에서 다른 문서를 가리킬 때는 **트리거**(언제 보는가)만 적고 본문 요약은 적지 않습니다 (`deploy/rules/global.md` 「참조 문서 진입점 작성」 참고).
-- 미확정 전제(테스트·CI·스냅샷·Tuist 버전 등)는 본문에 단정하지 않고 "가정" 라벨로 표기합니다. 테스트 관련 가정의 단일 출처는 [testing-strategy/assumptions.md](deploy/contexts/testing-strategy/assumptions.md)입니다.
+- 미확정 전제(테스트·CI·스냅샷·SwiftLint 설정 등)는 본문에 단정하지 않고 "가정" 라벨로 표기합니다. 테스트 관련 가정의 단일 출처는 [testing-strategy/assumptions.md](deploy/contexts/testing-strategy/assumptions.md)입니다.
