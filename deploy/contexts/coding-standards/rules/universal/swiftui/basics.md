@@ -1,5 +1,7 @@
 # SwiftUI 작성 규칙
 
+> **현재 미채택** — MINO의 UI는 UIKit 단독(UIViewController + AutoLayout)이라 SwiftUI를 쓰지 않는다. 아래는 향후 SwiftUI 도입 시에만 적용한다. 현재 화면 작성 규칙은 [uikit/basics.md](../uikit/basics.md)가 담당한다.
+
 ## View 분리 기준
 
 한 `View`의 `body`가 한 화면의 모든 구역을 직접 그리면, 재사용·프리뷰·리뷰 단위가 화면 전체로 묶인다. 다음 신호가 보이면 하위 `View`로 분리한다.
