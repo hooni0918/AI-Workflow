@@ -26,7 +26,7 @@
 |---|---|---|---|---|
 | MARKUP (실무) | Markup Implementer | figma 원본 직접 fetch ↔ 마크업 대조. **대조형**(실행 오라클 없음 — 디자인은 돌려서 판정 불가). 종료 커버리지: figma 화면·상태·토큰 전수 | SwiftLint + 마크업 컨벤션 | 화면/컴포넌트 단위 |
 | MARKUP (개인) | Markup Implementer | 사용자 시각 확인 ↔ 기획 md 대조. **대조형** (figma 없음, 사람이 진실 원천) | SwiftLint + 마크업 컨벤션 | 화면/컴포넌트 단위 |
-| 로직 IMPL (step-5) | Feature Implementer | `tuist test` 실행 green + `it.todo` 커버리지. **오라클형**(실행이 곧 판정) | SwiftLint + 로직 컨벤션 + Advanced | 로직 커밋 |
+| 로직 IMPL (step-5) | Feature Implementer | 테스트 실행 green(swift test/xcodebuild test) + `it.todo` 커버리지. **오라클형**(실행이 곧 판정) | SwiftLint + 로직 컨벤션 + Advanced | 로직 커밋 |
 
 ## 두 검증 축
 
@@ -34,13 +34,13 @@
 
 - 주입된 진실 원천을 **직접 fetch/실행**해 증분과 대조한다. 캐시·AI 산출물을 검사 기준으로 쓰지 않는다.
 - 증분이 통과 기준에 미달이면 그 증분은 통과하지 못한다. **어떤 호출도 축 A 없이 종료할 수 없다.**
-- 검증 메커니즘은 진실 원천의 성질로 주입된다: 실행 오라클(`tuist test`)이 있으면 그 실행 결과로, 없으면(디자인) Reviewer ↔ 구현자 직접 대조 루프로.
+- 검증 메커니즘은 진실 원천의 성질로 주입된다: 실행 오라클(테스트)이 있으면 그 실행 결과로, 없으면(디자인) Reviewer ↔ 구현자 직접 대조 루프로.
 - **팀 구성은 A 메커니즘의 함수다.** 오라클형(로직)이면 축 A Reviewer를 spawn하지 않는다 — 테스트 실행 결과가 곧 게이트다. 대조형(마크업)이면 Reviewer ↔ 구현자 직접 루프를 spawn한다.
 - 모든 증분 종료 후 주입된 **종료 커버리지 기준**으로 누락 0건을 1회 점검한다.
 
 ### B. 코딩 스탠다드 (공통 루프)
 
-- 주입된 스탠다드로 Reviewer ×N + 자유 리뷰를 0건까지 돌린다. SwiftLint는 `swiftlint lint --strict`를 직접 실행하는 기계 판정 ([conventions/tuist.md](conventions/tuist.md)). Coding-Standards 지적은 근거 컨벤션 파일 경로를 동반한다. Reviewer 결과는 Lead가 종합한다 — 중복 제거, sonnet 오탐 필터링, 검증된 이슈만 구현자에게 한번에 전달.
+- 주입된 스탠다드로 Reviewer ×N + 자유 리뷰를 0건까지 돌린다. SwiftLint는 `swiftlint lint --strict`를 직접 실행하는 기계 판정 ([conventions/spm.md](conventions/spm.md)). Coding-Standards 지적은 근거 컨벤션 파일 경로를 동반한다. Reviewer 결과는 Lead가 종합한다 — 중복 제거, sonnet 오탐 필터링, 검증된 이슈만 구현자에게 한번에 전달.
 - **축 B는 진실원천 충실도를 판정하지 않는다.** 충실도 의심을 발견하면 스스로 정답 처리하지 말고 **축 A로 넘긴다.**
 
 ## 루프
@@ -79,5 +79,5 @@
 
 ## 관련 컨벤션
 
-- 빌드·테스트·SwiftLint·tuist 검사 명령: [conventions/tuist.md](conventions/tuist.md)
+- 빌드·테스트·SwiftLint 명령: [conventions/spm.md](conventions/spm.md), 의존 검증: [spm-module/conventions/deps-verify.md](../spm-module/conventions/deps-verify.md)
 - stub 코드 룰: [conventions/stub.md](conventions/stub.md)
