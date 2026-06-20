@@ -11,22 +11,11 @@ PYTHON ?= python3
 SCRIPTS := scripts
 GIT_HOOKS_DIR := $(shell git rev-parse --git-path hooks 2>/dev/null)
 
-.PHONY: sync-environment unsync-environment verify-environment \
-        sync-system unsync-system \
+.PHONY: sync-system unsync-system \
         sync-local-system unsync-local-system \
         sync-local-skills unsync-local-skills \
         verify-hooks verify-settings verify-local-system \
         install-hooks uninstall-hooks
-
-# --- environment (package.json: sync:environment / unsync:environment / verify:environment) ---
-sync-environment:
-	$(PYTHON) $(SCRIPTS)/sync_environment.py
-
-unsync-environment:
-	$(PYTHON) $(SCRIPTS)/unsync_environment.py
-
-verify-environment:
-	$(PYTHON) $(SCRIPTS)/verify_environment.py
 
 # --- system (package.json: sync:system / unsync:system) ---
 sync-system:
