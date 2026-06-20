@@ -1,6 +1,6 @@
 # 리스트 화면
 
-데이터 목록을 나열하는 화면(`UITableView`, `UICollectionView`(diffable datasource) 등)에 추가 적용한다. 공통 iOS 엣지케이스(다크모드·Dynamic Type·SafeArea·빈상태·딥링크·백그라운드복귀·회전)는 step-1 본체에서 함께 점검한다.
+데이터 목록을 나열하는 화면에 추가 적용한다. 구현 어휘(목록 컴포넌트·데이터 소스 등)는 프로젝트 UI 프레임워크를 따른다(예: UIKit이면 UITableView/UICollectionView, SwiftUI면 List). 공통 iOS 엣지케이스(다크모드·Dynamic Type·SafeArea·빈상태·딥링크·백그라운드복귀·회전)는 step-1 본체에서 함께 점검한다.
 
 ## 빈 상태
 
@@ -13,13 +13,13 @@
 
 - 최초 로딩 시 스켈레톤/스피너가 정의되어 있는가?
 - 네트워크 실패 시 재시도 UI(에러 + 다시 시도)가 정의되어 있는가?
-- Pull-to-refresh(`UIRefreshControl`)가 필요한가? 갱신 중 표시는?
+- Pull-to-refresh가 필요한가? 갱신 중 표시는? (구현 어휘는 프로젝트 UI 프레임워크 따름)
 
 ## 대량 데이터 / 페이지네이션
 
 - 아이템이 매우 많을 때 (페이지네이션? 무한스크롤? 제한?)
 - 무한스크롤이면 마지막 페이지 도달·추가 로딩 실패 처리가 정의되어 있는가?
-- 셀 재사용·이미지 lazy 로딩으로 스크롤 성능을 확보하는가? (긴 목록 셀 재사용(`UITableView`/`UICollectionView`))
+- 셀 재사용·이미지 lazy 로딩으로 스크롤 성능을 확보하는가? (긴 목록 셀 재사용 — 구현 어휘는 프로젝트 UI 프레임워크 따름)
 
 ## 검색 / 필터
 

@@ -24,7 +24,7 @@ Step 3이 "무엇을 구현할지"를 결정했다면, 이 단계는 "어떻게 
 
 `/plan/pr{N}/`과 `/plan/background/`를 탐색하여 기존 AI 산출물을 읽고, **stub 코드(결정·코드 표현 가능 영역)와 잔존 md(narrative)로 분배**한다. 소비된 원본은 삭제한다.
 
-UIKit 화면 마크업(`*ViewController` 레이아웃 시각 구조·디자인 값)은 MARKUP 세션이 디자인 진실 원천 0건으로 완성하므로 **step-4의 stub 대상이 아니다.** 완성 마크업은 MARKUP 워크트리의 **검증된 화면 파일을 그대로 PR 워크트리로 가져온다**(재작성 금지). PR 로직은 가져온 마크업 파일을 **수정하지 않고 별도 파일**(ViewModel·container View 등)에서 주입·합성한다. step-4의 stub 대상은 그 **로직**(ViewModel·UseCase·Repository·테스트·모델·container)이다. (**개인 모드는 figma·markup.md 없음** — 로직·조립 구조 참조만.)
+프로젝트 UI 프레임워크의 화면 마크업(레이아웃 시각 구조·디자인 값)은 MARKUP 세션이 디자인 진실 원천 0건으로 완성하므로 **step-4의 stub 대상이 아니다.** 완성 마크업은 MARKUP 워크트리의 **검증된 화면 파일을 그대로 PR 워크트리로 가져온다**(재작성 금지). PR 로직은 가져온 마크업 파일을 **수정하지 않고 별도 파일**(ViewModel·container View 등)에서 주입·합성한다. step-4의 stub 대상은 그 **로직**(ViewModel·UseCase·Repository·테스트·모델·container)이다. (**개인 모드는 figma·markup.md 없음** — 로직·조립 구조 참조만.)
 
 ---
 
