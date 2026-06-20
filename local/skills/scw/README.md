@@ -1,6 +1,6 @@
-# SCW (Skill Creator Wrapper)
+# SCW — Skill Creator & Prompt Auditor
 
-현재 런타임에서 제공되는 skill-creator에 자체 원칙과 품질 검증을 더한 스킬입니다.
+현재 런타임의 skill-creator에 자체 원칙을 더하고, 스킬 개선·프롬프트 감사·개선 루프를 묶은 스킬입니다.
 
 ## 동기
 
