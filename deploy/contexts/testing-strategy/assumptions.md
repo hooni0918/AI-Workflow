@@ -13,7 +13,8 @@
 
 ## 단위 테스트 프레임워크 (확정)
 
-- 단위 테스트는 **XCTest**다 (확정 — 근거: `Packages/*/Tests/*Tests`). Swift Testing(`@Test`)은 미채택.
+- 단위 테스트는 **XCTest**다 (확정 — 근거: 배포 대상 프로젝트의 `Packages/*/Tests/*Tests`. 이 워크플로우 레포 자체엔 타깃 iOS 코드가 없으므로 "배포 대상 프로젝트 기준"이다). Swift Testing(`@Test`)은 미채택.
+- **테스트 TODO**: 구현 전 테스트 의도는 `XCTSkip("TODO: …")`(또는 미구현 test 명명 규약)로 코드에 표식한다. IMPL 종료 시 "TODO 표식 → 구현된 test 전환"을 grep 커버리지 게이트로 쓴다 (자동화 단위 테스트 한정, 수동 동작 테스트와 별개).
 - 테스트 타깃 구성은 각 패키지의 `Package.swift`가 `.testTarget(name:"<M>Tests")`를 선언하는 형태다. App 타깃엔 테스트 번들이 없다(앱레벨 테스트 부재).
 
 ## 스냅샷 테스트 (가정)
@@ -52,4 +53,4 @@ stub(시그니처만 만들고 본문은 미구현)으로 구조를 세울 때, 
 ## Observation·동시성 전제
 
 - `@Observable` 매크로는 **iOS 17+** 한정이며 배포 타깃(iOS 17)에서 가용하나, UI가 UIKit 단독이라 미사용이다.
-- Swift 6 strict concurrency의 "컴파일러 강제"는 **확정**이다 (근거: `project.pbxproj`의 `SWIFT_STRICT_CONCURRENCY=complete`). 모든 모듈이 strict concurrency mode이므로 데이터 경합 위반은 경고가 아니라 컴파일 에러로 강제된다.
+- Swift 6 strict concurrency의 "컴파일러 강제"는 **확정**이다 (근거: 배포 대상 프로젝트의 `project.pbxproj` `SWIFT_STRICT_CONCURRENCY=complete`). 모든 모듈이 strict concurrency mode이므로 데이터 경합 위반은 경고가 아니라 컴파일 에러로 강제된다.
