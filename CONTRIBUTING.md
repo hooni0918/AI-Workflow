@@ -27,7 +27,7 @@ make sync-local-system
 | 디렉터리 | 역할 | 배포 여부 |
 |-----------|------|-----------|
 | `deploy/rules/` | 전역 AI 행동 규칙 | 배포됨 |
-| `deploy/skills/` | 스킬 정의 (code-review, discussion, pre-exit) | 배포됨 |
+| `deploy/skills/` | 전역 배포 스킬 정의 | 배포됨 |
 | `deploy/contexts/` | 보조 참조 문서 (테스트 전략 가정 등) | 배포됨 |
 | `deploy/hooks/` | 정책 hook | 배포됨 |
 | `local/skills/` | 이 레포 로컬 스킬 (scw 등) | 로컬 배포 |
