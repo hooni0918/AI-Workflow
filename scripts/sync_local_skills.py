@@ -5,10 +5,8 @@ import sys
 from hook_guard import ensure_hooks_ready
 from deploy_lib import copy_path, ensure_dir, resolve_user_path
 
-default_roots = [
-    os.path.join(os.path.expanduser("~"), "WebstormProjects", "main"),
-    os.path.join(os.path.expanduser("~"), "WebstormProjects", "my-else"),
-]
+# 스캔 대상 프로젝트 루트는 인자로 명시하거나 AC_SKILL_ROOTS 환경변수(구분자 os.pathsep)로 지정한다.
+default_roots = [p for p in os.environ.get("AC_SKILL_ROOTS", "").split(os.pathsep) if p]
 
 
 def main(opts=None):
