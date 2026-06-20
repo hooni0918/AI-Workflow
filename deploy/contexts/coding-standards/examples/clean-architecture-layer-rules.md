@@ -1,8 +1,10 @@
-# Clean Architecture 레이어 경계 규칙
+# Clean Architecture 레이어 경계 규칙 (예시)
 
-레이어 간 import·의존 방향을 기계 대조 가능한 "~해라/~금지" 규칙으로 둔다. DIP·단방향·Anti-Corruption의 판단 근거·트레이드오프는 [principles/personal/architecture/clean-architecture.md](../../../principles/personal/architecture/clean-architecture.md)가 담당하고, 이 문서는 규칙만 둔다.
+> **예시 (참고용).** Clean Architecture/DDD 아키텍처/프레임워크를 쓰는 프로젝트의 예시다. 마스터 표준이 아니며, 네 프로젝트의 `.claude/docs`에 네 것으로 정의해 대체하라.
+>
+> 아래 레이어 구성(Feature·Domain·Data·Core·DesignSystem·Networking)은 한 프로젝트가 고른 예시일 뿐이다. 레이어 목록·의존 허용표·세부 경계는 네 프로젝트의 `.claude/docs/architecture.md`·`layer-rules.json`을 1차 출처로 따르고, 이 예시로 대체하라.
 
-프로젝트에 `.claude/docs/clean-architecture.md`가 있으면 **그 문서가 레이어·경계의 1차 출처**다. 레이어 목록·의존 허용표·세부 경계가 이 문서와 어긋나면 프로젝트 문서를 따른다. 이 문서는 프로젝트 문서가 없거나 침묵하는 부분을 메우는 방법론으로 읽는다.
+레이어 간 import·의존 방향을 기계 대조 가능한 "~해라/~금지" 규칙으로 두는 한 가지 방식이다. DIP·단방향·Anti-Corruption을 *왜* 그렇게 가르는지(판단 근거·트레이드오프)와 정확한 레이어 목록·경계는 네 프로젝트의 `.claude/docs`가 담당하고, 이 예시는 "규칙을 어떤 형태로 적는가"만 보여준다.
 
 ## 의존은 바깥→안쪽 한 방향이다
 

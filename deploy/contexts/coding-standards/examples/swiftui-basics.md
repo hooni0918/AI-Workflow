@@ -1,6 +1,8 @@
-# SwiftUI 작성 규칙
+> **예시 (참고용).** SwiftUI를 쓰는 프로젝트의 예시다. 마스터 표준이 아니며, 네 프로젝트의 .claude/docs에 네 것으로 정의해 대체하라.
 
-> **현재 미채택** — MINO의 UI는 UIKit 단독(UIViewController + AutoLayout)이라 SwiftUI를 쓰지 않는다. 아래는 향후 SwiftUI 도입 시에만 적용한다. 현재 화면 작성 규칙은 [uikit/basics.md](../uikit/basics.md)가 담당한다.
+# SwiftUI 작성 규칙 (예시)
+
+SwiftUI로 화면을 짜는 프로젝트가 View 분리·상태 소유·`body` 복잡도·관찰 모델을 어떻게 적는지 보여주는 예시다. 마스터는 UI 프레임워크를 고르지 않으므로, 네 프로젝트가 SwiftUI를 쓰는지·어떤 버전을 타깃하는지는 네 `.claude/docs`(예: `project-profile.md`)가 1차 출처다.
 
 ## View 분리 기준
 
@@ -32,4 +34,6 @@
 
 ## 관찰 모델은 도입 환경을 확인하고 쓴다
 
-상태 객체를 `@Observable` 매크로로 만들지, `ObservableObject`/`@Published`로 만들지는 **배포 타깃에 따라 갈린다**. `@Observable`은 iOS 17+ 한정이다. 전제·확정 기준은 [testing-strategy/assumptions.md](../../../../testing-strategy/assumptions.md) 「Observation·동시성 전제」가 단일 출처다 — 여기서 다시 단정하지 않는다.
+상태 객체를 `@Observable` 매크로로 만들지, `ObservableObject`/`@Published`로 만들지는 **배포 타깃에 따라 갈린다**. `@Observable`은 iOS 17+ 한정이다.
+
+> Observation·동시성 전제(배포 타깃, 채택 매크로, Swift Concurrency 적용 범위)의 **1차 출처는 네 프로젝트의 `.claude/docs`**(예: `project-profile.md`)다. 그 정의가 있으면 그것을 따르고, 없으면 사용자에게 묻거나 안전 가정(가정 라벨)으로 진행한다. 여기서는 모델 선택이 환경에 종속된다는 점만 예시로 보인다.

@@ -1,6 +1,7 @@
-# 수정하기 쉬운 SwiftUI 코드
+# 수정하기 쉬운 SwiftUI 코드 (예시)
 
-> **현재 미채택** — MINO의 UI는 UIKit 단독이라 SwiftUI를 쓰지 않는다. 아래는 향후 SwiftUI 도입 시에만 적용한다.
+> **예시 (참고용).** SwiftUI를 쓰는 프로젝트의 예시다. 마스터 표준이 아니며, 네 프로젝트의 `.claude/docs`에 네 것으로 정의해 대체하라.
+
 
 응집도가 높고 결합도가 낮은 코드를 지향한다. 리뷰 피드백은 응집도·결합도의 **종류**를 짚어 근거를 댄다.
 
@@ -46,8 +47,8 @@ struct ProductListScreen: View {
 ## 결합도 — 단위 사이의 연결을 약하게
 
 - **전역 가변 상태 공유(common coupling) 회피**: 여러 화면이 하나의 가변 싱글턴 상태를 직접 읽고 쓰면, 한 화면의 변경이 다른 화면의 동작을 예고 없이 바꾼다. 의존을 주입으로 명시하고, 공유 상태는 경계(저장소·환경 값)를 두고 다룬다.
-- **내부 구현 접근(content coupling) 회피**: 자식 `View`가 부모의 상태 객체 전체를 받아 그 내부 프로퍼티를 직접 만지면, 부모 구조가 바뀔 때 자식도 깨진다. 자식은 자기에게 필요한 값과 콜백만 받는다(rules/universal/swiftui/basics.md 「@State / @Binding」).
+- **내부 구현 접근(content coupling) 회피**: 자식 `View`가 부모의 상태 객체 전체를 받아 그 내부 프로퍼티를 직접 만지면, 부모 구조가 바뀔 때 자식도 깨진다. 자식은 자기에게 필요한 값과 콜백만 받는다(swiftui-basics.md 「@State / @Binding」).
 
 ## 미구현·미연결은 컴파일러가 다 잡지 못한다
 
-상태 객체를 stub으로 세우고 나중에 채우는 경우, 빈 본문·미초기화 프로퍼티는 컴파일러가 강제로 드러내지 못한다. 이 한계의 정확한 범위와 무엇을 테스트·리뷰가 맡아야 하는지는 [testing-strategy/assumptions.md](../../../../testing-strategy/assumptions.md) 「stub 검증의 한계」가 단일 출처다.
+상태 객체를 stub으로 세우고 나중에 채우는 경우, 빈 본문·미초기화 프로퍼티는 컴파일러가 강제로 드러내지 못한다. 이 한계의 정확한 범위와 무엇을 테스트·리뷰가 맡아야 하는지는 [testing-strategy/assumptions.md](../../testing-strategy/assumptions.md) 「stub 검증의 한계」가 단일 출처다.
