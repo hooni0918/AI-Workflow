@@ -8,7 +8,6 @@
 
 ```bash
 make install-hooks
-make sync-environment
 make sync-system
 make sync-local-system
 ```
@@ -34,7 +33,6 @@ make sync-local-system
 각 동기화 명령에는 대응 제거 명령이 있습니다. 제거 명령은 이 레포가 만든 산출물만 제거해야 합니다.
 
 ```bash
-make unsync-environment
 make unsync-system
 make unsync-local-system
 make uninstall-hooks
@@ -43,6 +41,5 @@ make uninstall-hooks
 ## 상세 가이드
 
 - [가이드 인덱스](guides/index.md)
-- [환경 동기화](guides/environment.md)
 - [시스템 자산 동기화](guides/system.md)
 - [로컬 시스템 동기화](guides/local-system.md)

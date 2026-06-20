@@ -4,7 +4,6 @@
 
 배포·hook 인프라는 Python으로 포팅되어 있습니다. 모든 명령은 `Makefile` 타겟이며 내부적으로 `python3 scripts/*.py`를 호출합니다.
 
-- [환경 동기화](environment.md): 현재 사용자 환경을 이 레포 기준으로 맞춥니다.
 - [시스템 자산 동기화](system.md): Claude/Codex/Gemini 등 에이전트 시스템 자산을 이 레포 기준으로 맞춥니다.
 - [로컬 시스템 동기화](local-system.md): 로컬 스킬(cross-repo)과 settings/hooks를 한 명령으로 맞춥니다.
 
