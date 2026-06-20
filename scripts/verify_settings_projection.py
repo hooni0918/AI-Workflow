@@ -75,11 +75,7 @@ def main():
         "claude: command dir 토큰 .claude",
     )
 
-    # claude: UserPromptSubmit 존재(매처 없는 그룹), PreToolUse는 Bash/SendMessage 분리
-    check(
-        any(h["event"] == "UserPromptSubmit" and h["matcher"] is None for h in claude),
-        "claude: UserPromptSubmit(매처 없음) 존재",
-    )
+    # claude: PreToolUse는 Bash/SendMessage 분리
     claude_pre = [h for h in claude if h["event"] == "PreToolUse"]
     check(
         any(h["matcher"] == "Bash" for h in claude_pre)
@@ -107,7 +103,7 @@ def main():
         os.path.join(".codex", "hooks") in codex_hooks_json or ".codex/hooks" in codex_hooks_json,
         "codex: command dir 토큰 .codex",
     )
-    # codex는 UserPromptSubmit 이벤트 hook(surface-backlog)과 EnterWorktree 전용 hook
+    # codex는 UserPromptSubmit 이벤트 hook과 EnterWorktree 전용 hook
     # (codex엔 그 tool이 없음)만 빠지고 나머지는 전부 등록
     codex_excluded = [
         hook_py_name(h["file"])

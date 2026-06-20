@@ -7,12 +7,6 @@
       "msg": "Auto-staging new file..."
     },
     {
-      "file": "surface_backlog.py",
-      "event": "UserPromptSubmit",
-      "on": "prompt",
-      "msg": "Surfacing related backlog..."
-    },
-    {
       "file": "surface_claude_md.py",
       "event": "PreToolUse",
       "on": "search",
