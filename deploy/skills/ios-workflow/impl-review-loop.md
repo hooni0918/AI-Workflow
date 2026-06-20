@@ -26,7 +26,7 @@
 |---|---|---|---|---|
 | MARKUP (실무) | Markup Implementer | figma 원본 직접 fetch ↔ 마크업 대조. **대조형**(실행 오라클 없음 — 디자인은 돌려서 판정 불가). 종료 커버리지: figma 화면·상태·토큰 전수 | SwiftLint + 마크업 컨벤션 | 화면/컴포넌트 단위 |
 | MARKUP (개인) | Markup Implementer | 사용자 시각 확인 ↔ 기획 md 대조. **대조형** (figma 없음, 사람이 진실 원천) | SwiftLint + 마크업 컨벤션 | 화면/컴포넌트 단위 |
-| 로직 IMPL (step-5) | Feature Implementer | 테스트 실행 green(swift test/xcodebuild test) + `it.todo` 커버리지. **오라클형**(실행이 곧 판정) | SwiftLint + 로직 컨벤션 + Advanced | 로직 커밋 |
+| 로직 IMPL (step-5) | Feature Implementer | 테스트 실행 green(swift test/xcodebuild test) + 테스트 TODO 커버리지. **오라클형**(실행이 곧 판정) | SwiftLint + 로직 컨벤션 + Advanced | 로직 커밋 |
 
 ## 두 검증 축
 
