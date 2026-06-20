@@ -1,0 +1,89 @@
+# 이 파일을 프로젝트 루트의 .swiftlint.yml로 복사해 프로젝트에 맞게 조정하라.
+# 정적분석 사다리 최하단(기계 대조): 네이밍·스타일·타입 단순 위반과
+# 강제 언래핑/캐스팅 같은 사고 패턴을 도구가 먼저 거른 뒤, 의미·맥락 판단만
+# 리뷰로 올린다. 여기 값은 합리적 스타터이며 단정이 아니다 — 실측 후 확정하라.
+#
+# included/excluded·룰 임계값은 프로젝트 디렉터리 구조에 맞춰 바꾼다(자리표시자).
+# 룰명은 SwiftLint 표준 룰 기준. 설치된 버전에서 deprecated/rename된 룰이 있으면
+# `swiftlint rules`로 실측해 맞춘다.
+
+# ── 검사 대상 ──────────────────────────────────────────────
+# 소스 디렉터리만 검사한다. <Packages>·<App>은 프로젝트 디렉터리명으로 바꾼다.
+included:
+  - Packages
+  - App
+
+# 빌드 산출물·외부 코드·테스트는 제외한다.
+# 테스트를 분리하는 이유: 테스트 코드는 강제 언래핑/임시 패턴 허용 범위가 다르다.
+# 테스트에도 린트를 걸고 싶으면 Tests를 excluded에서 빼고, force_unwrapping 등
+# 테스트에 부적합한 룰만 별도로 끈다.
+excluded:
+  - .build
+  - .swiftpm
+  - "**/.build"
+  - "**/Tests"
+  - "**/*.generated.swift"
+
+# ── opt-in 룰 ──────────────────────────────────────────────
+# 기본 비활성이지만 켜 두면 사고를 줄이는 룰. force_unwrapping이 핵심이다.
+opt_in_rules:
+  - force_unwrapping        # 옵셔널 `!` 강제 언래핑 검출 (guard let/if let/?? 로 풀어라)
+  - empty_count             # `.count == 0` 대신 `.isEmpty`
+  - first_where             # `.filter { }.first` 대신 `.first(where:)`
+  - contains_over_first_not_nil
+  - redundant_nil_coalescing
+  - closure_spacing
+  - explicit_init
+  - sorted_first_last
+  - unused_import
+
+# ── 기본 룰 끄기 ───────────────────────────────────────────
+# todo는 끈다 — 테스트 TODO(XCTSkip 표식)·구현 TODO 마킹을 린트로 막지 않는다.
+# 미구현 표식은 워크플로의 grep 커버리지 게이트가 다루지, 린트가 거를 대상이 아니다.
+disabled_rules:
+  - todo
+
+# ── 룰 임계값 ──────────────────────────────────────────────
+# warning에서 깨지게 할지(--strict)·error만 깨지게 할지는 CI 게이트에서 정한다.
+# 이 파일은 임계값만 정의한다.
+
+line_length:
+  warning: 120
+  error: 200
+  ignores_urls: true
+  ignores_comments: false
+
+type_name:
+  min_length: 3
+  max_length:
+    warning: 50
+    error: 60
+  # 표준 케이스 규칙(UpperCamelCase)은 룰 기본값을 따른다.
+
+identifier_name:
+  min_length: 2          # 한 글자 변수 금지의 기계 측. 단, 아래 굳은 약어는 허용.
+  max_length:
+    warning: 50
+    error: 60
+  allowed_symbols: ["_"]
+  excluded:
+    - id                 # 널리 굳은 약어
+    - url
+    - dto
+    - x
+    - y                  # 좌표 등 도메인 관용. 프로젝트에서 불필요하면 지운다.
+
+# ── 커스텀 룰 ──────────────────────────────────────────────
+custom_rules:
+  no_print:
+    name: "print 직접 호출 금지"
+    regex: '(\bprint\()'
+    message: "배포 코드에서 print로 로깅하지 마라. 프로젝트 로거(os.Logger 등)를 써라."
+    severity: warning
+    # 디버그 전용 print를 허용할 영역이 있으면 match_kinds나 별도 excluded로 좁힌다.
+
+# ── 분석기 룰(swiftlint analyze) ───────────────────────────
+# 컴파일 정보가 필요한 분석기 룰은 별도 실행(`swiftlint analyze`)이 필요하다.
+# 도입 여부·실행 절차는 프로젝트 CI 설정에서 정한다.
+analyzer_rules:
+  - unused_declaration

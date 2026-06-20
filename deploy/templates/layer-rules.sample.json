@@ -1,0 +1,8 @@
+{
+  "Feature": ["Domain", "DesignSystem"],
+  "Data": ["Domain", "Networking"],
+  "DesignSystem": ["Core"],
+  "Domain": ["Core"],
+  "Networking": ["Core"],
+  "Core": []
+}
