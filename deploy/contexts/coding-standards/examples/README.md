@@ -2,7 +2,7 @@
 
 여기 있는 파일들은 **예시**다. 특정 아키텍처(예: Clean Architecture/DDD)·UI 프레임워크(예: UIKit/SwiftUI)·네이밍을 쓰는 프로젝트가 *어떻게 자기 표준을 정의하는지* 보여줄 뿐, 마스터 표준이 아니다.
 
-마스터(이 디렉토리의 상위 `rules/`·`principles/`)는 iOS 표준을 **정의·강제하는 방법**과 범용 규칙·원칙만 담고, 어떤 아키텍처·UI 프레임워크·레이어·네이밍을 쓸지는 고르지 않는다. 그 구체 사실은 **사용 레포가 공급**한다 — 네 프로젝트의 `.claude/docs/architecture.md`, `layer-rules.json`, `.claude/docs/project-profile.md`.
+마스터(이 디렉토리의 상위 `rules/`·`principles/`)는 iOS 표준을 **정의·강제하는 방법**과 범용 규칙·원칙만 담고, 어떤 아키텍처·UI 프레임워크·레이어·네이밍을 쓸지는 고르지 않는다. 그 구체 사실은 **사용 레포가 공급**한다. 네 프로젝트의 `.claude/docs/architecture.md`, `layer-rules.json`, `.claude/docs/project-profile.md`가 그것이다.
 
 ## 이 폴더를 쓰는 법
 
