@@ -41,7 +41,7 @@ SPM은 `dependencies`에 선언 안 한 모듈을 import하면 컴파일을 실�
 **1차(결정론적 게이트)**: 레이어 정적 검사기를 프로젝트 레이어 규칙으로 돌린다.
 
 ```bash
-python3 check_spm_layers.py <packages_dir> --rules <프로젝트 layer-rules.json>
+python3 scripts/check_spm_layers.py <packages_dir> --rules <프로젝트 layer-rules.json>
 ```
 
 검사기가 각 `Package.swift`의 `dependencies`를 떠서 허용 방향과 대조하고, 역방향·수평·미허용·사이클이면 **종료코드 1로 차단**한다 — LLM·사람 판단 없이 동일하게 판정하므로 이 결과가 track B 통과의 근거다. `--rules`에는 프로젝트가 공급한 `layer-rules.json`(키=모듈, 값=그 모듈이 의존해도 되는 하위 모듈 목록)을 넘긴다. 이 파일이 없으면 프로젝트 레이어 규칙([module-layers.md](module-layers.md)가 가리키는 1차 출처)에서 허용표를 옮겨 만들거나 사용자에게 확인한다 — 임의의 레이어 목록을 채워 넣지 않는다.
