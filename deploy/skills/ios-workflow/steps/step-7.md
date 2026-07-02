@@ -11,7 +11,7 @@ PR 본문을 작성한다. 작업 컨텍스트로 `/plan/pr{N}/` 하위의 모�
 PR 본문 구성:
 - 무엇을 / 왜 (overview.md 의도 + decisions.md 핵심 결정)
 - 변경 요약 (커밋 로그 기반)
-- Test plan (user-test-cases.md 재활용 — 빌드·실행은 [conventions/spm.md](../conventions/spm.md) 명령)
+- Test plan (user-test-cases.md 재활용 — 빌드·실행은 [conventions/spm.md](../conventions/spm.md) 명령). 자동 QA 판정 리포트(step-6.4)가 있으면 결과 요약을 첨부한다.
 - Known issues / Follow-up (overview.md 「열려있는 질문」)
 
 작성 후 사용자가 톤·구조·분량을 다듬는다.

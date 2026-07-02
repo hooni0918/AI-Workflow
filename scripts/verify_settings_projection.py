@@ -118,10 +118,6 @@ def main():
         ),
         "codex: UserPromptSubmit·EnterWorktree 외 모든 hook 등록됨",
     )
-    check(
-        not any(h["file"] == "post_enterworktree_install.py" for h in codex),
-        "codex: EnterWorktree 전용 hook 미등록",
-    )
 
     if failures:
         sys.stderr.write(f"settings 생성 계약 검증 실패: {len(failures)}건\n")

@@ -86,7 +86,7 @@ App(컴포지션 루트)은 manifest 생성 도구로 자동 생성하지 않는
 - **레이어 방향(역방향·수평·사이클)**: `check_spm_layers.py`로 각 `Package.swift`의 `dependencies`를 추출해 프로젝트 허용표와 대조한다. 선언된 역방향은 빌드가 못 잡으므로 이 대조가 유일한 게이트다.
 
 ```bash
-python3 check_spm_layers.py <packages_dir> --rules <프로젝트 layer-rules.json>
+python3 scripts/check_spm_layers.py <packages_dir> --rules <프로젝트 layer-rules.json>
 ```
 
 `--rules`에는 프로젝트가 공급한 `layer-rules.json`(키=모듈, 값=그 모듈이 의존해도 되는 하위 모듈 목록)을 넘긴다. 이 파일이 없으면 프로젝트 `architecture.md`의 허용표를 옮겨 만들거나 사용자에게 확인한다 — 마스터가 임의의 레이어 목록을 채워 넣지 않는다.

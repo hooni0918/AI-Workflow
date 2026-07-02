@@ -61,6 +61,7 @@ iOS 코딩 표준을 **정의·강제하는 방법**의 마스터 인덱스다. 
 범용 규율만 둔다. 특정 UI 프레임워크·아키텍처를 고르지 않는다.
 
 rules/universal/swift/general.md
+rules/universal/swift/accessibility.md
 rules/naming.md
 rules/spm-modularization.md [file-folder-structure]
 
