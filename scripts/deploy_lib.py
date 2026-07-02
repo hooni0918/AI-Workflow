@@ -787,9 +787,8 @@ def uninstall_target(target_dir, options=None):
     return removed
 
 
-# 구버전에서 등록하던 글로벌 git wt-add alias를 제거한다. 워크트리 의존성 복구는
-# 이제 PostToolUse self-heal hook(post-worktree-install / post-enterworktree-install)이
-# 전담하므로 alias는 폐기한다. sync/unsync 모두에서 호출해 잔여 alias를 정리한다.
+# 구버전에서 등록하던 글로벌 git wt-add alias를 제거한다. 훅 구조 개편으로 alias는
+# 폐기됐고, 사용자 홈에 남은 잔여 alias를 sync/unsync 모두에서 호출해 정리한다.
 def unset_wt_add_alias(log=print):
     try:
         subprocess.run(

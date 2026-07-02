@@ -141,7 +141,6 @@ SKILL.md를 새로 만들거나 수정했으면 H1 바로 아래에 `## 목적`�
 - 스킬은 `deploy/skills/{skill-name}/`에 생성
 - 드래프트 상태면 `STATUS.md`를 함께 생성하여 진행 상황과 남은 작업 기록
 - 실사용 후 안정되면 `STATUS.md` 삭제
-- 커밋 메시지 scope에 스킬명을 쓸 수 있도록 git commit-msg 훅(`scripts/commit_msg.py`)의 `SCOPE_ENUM`에 추가
 
 ## gotchas 축적
 

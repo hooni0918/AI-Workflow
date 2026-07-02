@@ -56,6 +56,8 @@ AI 코드 리뷰(6.2) + 사용자 코드 리뷰(6.3) 통과 후, 사용자가 PR
 
 양식: `- [ ] <시나리오>: <조건>일 때 <기대 동작>`
 
+프로젝트 프로필(`.claude/docs/project-profile.md`)에 「동작 테스트 자동화」 슬롯이 정의되어 있으면, 사용자 수동 테스트 전에 그 슬롯이 가리키는 스킬을 소환해 `user-test-cases.md` 시나리오를 자동 실행시키고 판정 리포트를 받는다. PASS 항목은 `- [x]`로 표시하고, 판정 보류·FAIL 항목만 사용자 수동 확인 대상으로 안내한다. 리포트는 `/plan/pr{N}/consumable/`에 남겨 step-7 Test plan에 첨부한다. 슬롯이 없으면 아래 수동 절차를 그대로 따른다.
+
 Lead는 변경분을 훑어 TC 추출 → 파일 작성 후 사용자에게 경로 + 테스트 진입 방법(시뮬레이터 빌드·실행 — [conventions/spm.md](../conventions/spm.md)의 `xcodebuild build`) 안내. 사용자 실패 발견 시 수정 지시 → Implementer 처리 → 다시 6.2부터.
 
 step-7에서 PR 본문 Test plan으로 재활용 후 파일 정리한다.
