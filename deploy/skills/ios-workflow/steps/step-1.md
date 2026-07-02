@@ -51,6 +51,7 @@ iOS 화면은 기획서가 잘 다루지 않는 빈틈이 많다. 각 화면을 
 - **딥링크**: 외부에서 이 화면으로 직접 진입할 수 있는가? 선행 데이터 없이 진입하면 어떻게 되는가?
 - **백그라운드 복귀**: 백그라운드에 갔다가 복귀(scene 활성화)하면 데이터 갱신·타이머·인증 만료 처리가 정의되어 있는가?
 - **회전 / 멀티태스킹**: 가로/세로 회전, iPad Split View에서 레이아웃이 어떻게 바뀌는가? 회전 지원 여부가 정해져 있는가?
+- **접근성**: 인터랙션 요소의 VoiceOver 레이블과 accessibilityIdentifier 네이밍이 정의되어 있는가? (identifier는 UI 자동화의 셀렉터를 겸한다)
 
 화면 종류별 추가 체크리스트:
 - 리스트형: [requirement-review/screen-type/list.md](../requirement-review/screen-type/list.md)
