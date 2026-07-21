@@ -12,3 +12,6 @@ nul
 __pycache__/
 *.pyc
 bench/
+
+# flutter-workflow: 리뷰 채굴 캐시(팀 리뷰어 패턴·내부 컨벤션 포함)는 공개 레포에서 제외 — 로컬 배포만
+deploy/skills/flutter-workflow/conventions/review-checklist.md
