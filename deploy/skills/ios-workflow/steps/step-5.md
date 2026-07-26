@@ -37,9 +37,9 @@ Lead (메인 세션) — 사용자 소통 + 팀 spawn + Coding-Standards 리뷰 
 
 | 에이전트 | Lead가 주입하는 컨텍스트 |
 |----------|--------------------------|
-| Feature Implementer | ViewModel·로직 stub 파일들 (`// TODO [AI_IMPL]:` 포함), 참조할 기존 코드 경로, `reference.md`, 로직 관련 컨벤션 |
-| Coding-Standards Reviewer ×N | 담당 컨벤션 문서 + `.swiftlint.yml`, 리뷰 관점 지시, `reference.md` |
-| Advanced Reviewer | [code-review](../../code-review/SKILL.md) 절차, coding standards, `reference.md`, stub 테스트의 테스트 TODO |
+| Feature Implementer | ViewModel·로직 stub 파일들 (`// TODO [AI_IMPL]:` 포함), 참조할 기존 코드 경로, `reference.md`, 로직 관련 컨벤션, 프로필의 추가 판단 기준 스킬 |
+| Coding-Standards Reviewer ×N | 담당 컨벤션 문서 + `.swiftlint.yml`, 리뷰 관점 지시, `reference.md`, 담당 주제에 걸리는 추가 판단 기준 스킬 |
+| Advanced Reviewer | [code-review](../../code-review/SKILL.md) 절차, coding standards, `reference.md`, stub 테스트의 테스트 TODO, 프로필의 추가 판단 기준 스킬 |
 
 리뷰어는 [code-review](../../code-review/SKILL.md)의 절차를 따른다.
 
