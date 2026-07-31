@@ -37,7 +37,12 @@ BG가 후속 세션 spawn 안내를 출력할 때 동일 모드 인자를 그대
 | **PR_{N}_IMPL** | PR_{N}_PLAN.step-4 종료 (필수) + (화면 코드 포함 PR이면) MARKUP의 해당 화면 코드 (필수) + (PR_{N-1}이 stub 만든 경우) PR_{N-1} stub 시그니처 확정 (필수) | implementation.md, markup.md, MARKUP 화면 코드, decisions·reference | 코드 변경 + 커밋 (로직 stub 위에 본체 채움; 마크업은 MARKUP 완성본 import) / `pr{N}/consumable/`: review.md, user-test-cases.md | step-5 끝 후 → PR_{N}_WRITING | PR_{N} 워크트리. 본 PR 하나에 집중 | **Sonnet** (PLAN이 방침 확정 시) — PLAN이 알고리즘 판단을 미뤘으면 Opus |
 | **PR_{N}_WRITING** | PR_{N}_IMPL.step-5 종료 | implementation.md + 커밋 로그 + decisions.md + reference.md + `pr{N}/consumable/` 잔여 산출물 | `pr{N}/consumable/pr-body.md` (작성 후 PR 본문 복사 → 폐기) / overview.md 폐기 / `pr{N}/persistent/`는 제외 (영구 보존) | step-7 끝 후 → PR_{N} 머지 안내. 머지 후 PR_{N+1}_PLAN spawn 안내 (PR_{N}이 stub 안 만든 경우) | 구현 맥락 없이 파일 기반으로 PR 본문 작성 | **Opus** — 구현 맥락 없이 파일만 보고 사용자 의도를 추론, 의도 오독 비용 큼 |
 
-(6) 권장 모델은 **세션 구동 모델**이다. MARKUP·IMPL이 내부에서 spawn하는 reviewer 서브에이전트는 impl-review-loop의 자체 모델 분할(기계적 대조=Sonnet/Haiku, 깊은 품질 판단=Opus)을 따른다 — 본 칸과 별개.
+(6) 권장 모델은 **세션 구동 모델**이다. MARKUP·IMPL이 내부에서 spawn하는 서브에이전트는 자체 모델 분할(기계적 대조=Sonnet, 깊은 품질 판단=Opus)을 따른다 — 본 칸과 별개.
+
+**두 모델의 강제 수준이 다르다.**
+
+- **서브에이전트 모델은 강제된다** — `agents/` 정의 frontmatter가 소유하며 하네스가 적용한다. 단 `subagent_type` 으로 spawn해야 적용된다(타입 미지정 = 부모 모델 상속).
+- **세션 구동 모델은 강제할 수 없다** — 하네스에 세션 모델을 프로그램으로 바꾸는 경로가 없다(hook은 모델 변경 불가, `settings.json`의 `model`은 세션 시작 시 1회만 읽힘). 그래서 세션 진입 시 **사용자에게 권장 모델을 알리고 `/model` 전환을 요청**한다. 사용자가 현재 모델로 진행하겠다고 하면 그대로 진행한다.
 
 ### 의존성 그래프
 
