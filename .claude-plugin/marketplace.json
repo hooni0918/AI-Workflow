@@ -1,0 +1,15 @@
+{
+  "name": "hooni-workflow",
+  "description": "기획서·디자인을 PR로 변환하는 AI 워크플로우 스킬 배포 채널",
+  "owner": {
+    "name": "hooni0918",
+    "url": "https://github.com/hooni0918"
+  },
+  "plugins": [
+    {
+      "name": "ai-workflow",
+      "source": "./deploy",
+      "description": "기획서·디자인 시안을 iOS/Flutter PR로 변환하는 워크플로우 스킬 묶음"
+    }
+  ]
+}

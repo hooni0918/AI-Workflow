@@ -1,0 +1,11 @@
+{
+  "name": "ai-workflow",
+  "description": "기획서·디자인 시안을 iOS/Flutter PR로 변환하는 워크플로우 스킬 묶음 (ios-workflow, code-review, spm-module 등)",
+  "author": {
+    "name": "hooni0918",
+    "url": "https://github.com/hooni0918"
+  },
+  "homepage": "https://github.com/hooni0918/AI-Workflow",
+  "repository": "https://github.com/hooni0918/AI-Workflow",
+  "license": "MIT"
+}
