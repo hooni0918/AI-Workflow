@@ -1,8 +1,7 @@
 ---
 name: ios-workflow
-description: 기획서, 디자인 시안(피그마 URL·캡처 등), 버그 리포트를 iOS PR로 변환하는 워크플로우. 배경 파악 → PR 분할 → 설계(stub 시그니처) → 구현 → 테스트 → PR 본문까지 단계별 진행. iOS 작업의 커밋, PR 작성 시 이 스킬을 사용한다.
+description: 기획서, 디자인 시안(피그마 URL·캡처 등), 버그 리포트를 iOS PR로 변환하는 워크플로우. 배경 파악 → PR 분할 → 설계(stub 시그니처) → 구현 → 테스트 → PR 본문까지 단계별 진행. /mino 가 세션을 판정해 호출하는 마스터 스킬 — 사용자가 명시적으로 요청하거나 /mino 를 경유할 때만 사용하고, 일반 iOS 작업에서 자동 트리거하지 않는다.
 argument-hint: <세션 이름> <실무|개인>
-disable-model-invocation: true
 ---
 
 # iOS 워크플로우
