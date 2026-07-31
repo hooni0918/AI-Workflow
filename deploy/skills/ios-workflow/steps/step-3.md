@@ -62,7 +62,7 @@ step-3 종료 직전 각 갈래를 분배한다:
 overview.md 작성 후, 토론할 의사결정 항목을 식별하여 사용자에게 안내한다. 자동으로 토론에 진입하지 않으며, 사용자의 명시적 허가가 있을 때만 진행한다.
 
 - **안내 내용**: 토론 후보 항목 목록 + 항목별 핵심 쟁점 한 줄. 각 후보 옆에 trade-off 칸을 비워두고 사용자가 채우게 한 뒤 토론 진행.
-- **방식 (허가 시)**: 반대 입장 에이전트(opus, `subagent_type: opposing-advocate`)를 spawn하여 메인 에이전트가 기술 선택을 방어한다. 반대 에이전트는 [/discussion 원칙](../../discussion/SKILL.md) 적용 — 정확성 우선, 모호한 근거 수용 금지. 타입 지정을 빠뜨리면 부모 모델을 상속해 opus 보장이 깨진다.
+- **방식 (허가 시)**: 반대 입장 에이전트(opus, `subagent_type: opposing-advocate` — 플러그인 설치 시 `ai-workflow:` 접두사)를 spawn하여 메인 에이전트가 기술 선택을 방어한다. 반대 에이전트는 [/discussion 원칙](../../discussion/SKILL.md) 적용 — 정확성 우선, 모호한 근거 수용 금지. 타입 지정을 빠뜨리면 부모 모델을 상속해 opus 보장이 깨진다.
 
 ### [CRITICAL] Project 문서 간소화
 
