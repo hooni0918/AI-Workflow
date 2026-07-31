@@ -58,7 +58,33 @@ AI가 코드를 만들거나 고칠 때마다, 기존 동작이 깨지지 않았
 
 자동 검사가 잡지 못하는 문제(화면과 데이터 로직이 섞여 분리가 필요한 경우, 화면이 비즈니스 로직을 직접 구현해 레이어 경계를 어긴 경우 등)는 AI 리뷰가 맡습니다. 반복된 지적은 [coding-standards](deploy/contexts/coding-standards/README.md)에 규칙으로 쌓아 두고 [code-review](deploy/skills/code-review/README.md) 스킬이 그 규칙을 읽어 대조하므로, 사람이 리뷰에 쓰는 시간이 점점 줄어듭니다.
 
-## 배포
+## 설치 (Claude Code 플러그인)
+
+이 저장소는 Claude Code 플러그인 마켓플레이스를 겸합니다. 클론이나 `make` 없이 두 줄로 스킬 전체를 받습니다.
+
+```
+/plugin marketplace add hooni0918/AI-Workflow
+/plugin install ai-workflow@hooni-workflow
+```
+
+설치하면 스킬 이름 앞에 플러그인 이름이 붙습니다 — `/ai-workflow:ios-workflow`, `/ai-workflow:code-review` 처럼 씁니다. 새 커밋이 올라오면 `/plugin update` 로 갱신합니다.
+
+팀 저장소에서 쓴다면 프로젝트 `.claude/settings.json` 에 아래를 커밋해 두면, 팀원이 폴더를 신뢰할 때 설치 안내가 자동으로 떠서 각자 명령을 칠 필요가 없습니다.
+
+```json
+{
+  "extraKnownMarketplaces": {
+    "hooni-workflow": {
+      "source": { "source": "github", "repo": "hooni0918/AI-Workflow" }
+    }
+  },
+  "enabledPlugins": { "ai-workflow@hooni-workflow": true }
+}
+```
+
+플러그인이 나르는 것은 **스킬과 그 스킬이 참조하는 자산**(`deploy/contexts`, `deploy/templates`)입니다. 전역 규칙(`deploy/rules/global.md`)과 hook(`deploy/hooks/`)은 플러그인 경로로는 활성화되지 않으므로, 그것까지 원하면 아래 클론 배포를 쓰세요.
+
+## 배포 (클론해서 직접 배포)
 
 스킬과 규칙, hook은 `make`로 배포합니다. 배포 인프라는 Python(`python3 scripts/*.py`)으로 짰고, 진입점은 `Makefile`입니다.
 
