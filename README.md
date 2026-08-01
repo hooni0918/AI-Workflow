@@ -63,9 +63,11 @@ AI가 코드를 만들거나 고칠 때마다, 기존 동작이 깨지지 않았
 이 저장소는 Claude Code 플러그인 마켓플레이스를 겸합니다. 클론이나 `make` 없이 두 줄로 스킬 전체를 받습니다.
 
 ```
-/plugin marketplace add hooni0918/AI-Workflow
+/plugin marketplace add https://github.com/hooni0918/AI-Workflow.git
 /plugin install ai-workflow@hooni-workflow
 ```
+
+`hooni0918/AI-Workflow` 처럼 `owner/repo` 축약형을 쓰면 **SSH(`git@github.com:…`)로 클론**합니다. 이 저장소는 public이라 SSH 키가 필요 없으므로, HTTPS URL을 그대로 쓰는 편이 안전합니다 — 키가 없거나 `ssh-agent`에 안 올라간 환경에서는 축약형이 안내 없이 실패합니다.
 
 설치하면 스킬 이름 앞에 플러그인 이름이 붙습니다 — `/ai-workflow:ios-workflow`, `/ai-workflow:code-review` 처럼 씁니다. 새 커밋이 올라오면 `/plugin update` 로 갱신합니다.
 
@@ -81,7 +83,7 @@ AI가 코드를 만들거나 고칠 때마다, 기존 동작이 깨지지 않았
 {
   "extraKnownMarketplaces": {
     "hooni-workflow": {
-      "source": { "source": "github", "repo": "hooni0918/AI-Workflow" }
+      "source": { "source": "url", "url": "https://github.com/hooni0918/AI-Workflow.git" }
     }
   },
   "enabledPlugins": { "ai-workflow@hooni-workflow": true }
