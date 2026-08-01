@@ -26,10 +26,14 @@ Lead(메인 세션)가 팀을 구성하고, Feature Implementer가 코드를 작
 
 ```
 Lead (메인 세션) — 사용자 소통 + 팀 spawn + Coding-Standards 리뷰 종합
-├── Feature Implementer (sonnet) — 로직 구현 + 테스트 작성 + 성능 최적화
-├── Coding-Standards Reviewer ×N (sonnet) — 컨벤션 기계적 대조 (SwiftLint 직접 실행 포함)
-└── Advanced Reviewer (opus) — 코드 품질 판단 + 자유 리뷰
+├── Feature Implementer (sonnet)          → subagent_type: feature-implementer
+├── Coding-Standards Reviewer ×N (sonnet) → subagent_type: coding-standards-reviewer
+└── Advanced Reviewer (opus)              → subagent_type: advanced-reviewer
 ```
+
+**[CRITICAL] spawn 은 `subagent_type` 으로 한다.** 모델·도구 제한은 `agents/` 정의가 소유하며, 타입을 지정하지 않은 spawn 은 **부모 세션 모델을 상속한다** — 기계적 컨벤션 대조가 비싼 모델로 떠서 낭비되고, 리뷰어가 Edit 권한을 갖게 되어 구현↔검증 분리도 무너진다.
+
+타입 이름은 설치 경로에 따라 다르다 — 플러그인 설치는 `ai-workflow:feature-implementer` 처럼 접두사가 붙고, 전역 설치(`make sync-system`)는 `feature-implementer` 로 붙는다. **에이전트 목록에서 실제 이름을 확인해 쓴다.** 둘 다 없으면 그때만 `model` 인자를 직접 지정한다(sonnet/sonnet/opus).
 
 ### Step 5.1.1. Spawn 시 컨텍스트 주입
 

@@ -1,0 +1,16 @@
+# NOTICE — 벤더링된 서드파티 스킬
+
+`deploy/skills/` 아래 일부 스킬은 외부 저장소에서 **복사 벤더링**한 것이다.
+원작자의 저작권과 라이선스는 각 항목에 표기한 대로 유지된다. 수정 없이 그대로 포함했으며,
+업스트림 변경을 반영하려면 아래 출처에서 다시 받아 덮어쓴다.
+
+## deploy/skills/axe
+
+- 원본: https://github.com/cameroncooke/AXe
+- 원작자: Cameron Cooke
+- 라이선스: MIT
+- 벤더링 커밋: abd9fbc
+- 원본 경로: `Skills/CLI/axe/`
+- 벤더링 시점: 2026-08-01
+- 비고: 벤더링한 것은 **스킬 가이드 문서뿐**이다. 실제 `axe` 실행 파일은 별도 설치가 필요하다.
+  `brew install cameroncooke/axe/axe` — `/setup` 스킬이 설치 여부를 점검하고 설치를 제안한다.

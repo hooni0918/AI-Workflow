@@ -69,6 +69,12 @@ AI가 코드를 만들거나 고칠 때마다, 기존 동작이 깨지지 않았
 
 설치하면 스킬 이름 앞에 플러그인 이름이 붙습니다 — `/ai-workflow:ios-workflow`, `/ai-workflow:code-review` 처럼 씁니다. 새 커밋이 올라오면 `/plugin update` 로 갱신합니다.
 
+이어서 로컬 환경을 한 번에 맞춥니다. `axe`·시뮬레이터·빌드 도구를 실제로 점검하고 빠진 것만 설치를 제안합니다.
+
+```
+/ai-workflow:setup
+```
+
 팀 저장소에서 쓴다면 프로젝트 `.claude/settings.json` 에 아래를 커밋해 두면, 팀원이 폴더를 신뢰할 때 설치 안내가 자동으로 떠서 각자 명령을 칠 필요가 없습니다.
 
 ```json
@@ -82,7 +88,7 @@ AI가 코드를 만들거나 고칠 때마다, 기존 동작이 깨지지 않았
 }
 ```
 
-플러그인이 나르는 것은 **스킬과 그 스킬이 참조하는 자산**(`deploy/contexts`, `deploy/templates`)입니다. 전역 규칙(`deploy/rules/global.md`)과 hook(`deploy/hooks/`)은 플러그인 경로로는 활성화되지 않으므로, 그것까지 원하면 아래 클론 배포를 쓰세요.
+플러그인이 나르는 것은 **스킬 · 에이전트 정의(`deploy/agents`) · 스킬이 참조하는 자산**(`deploy/contexts`, `deploy/templates`)과 세션 진입 시 권장 모델을 알려주는 hook 하나입니다. 전역 규칙(`deploy/rules/global.md`)과 커밋·푸시 정책 hook은 플러그인 경로로 활성화되지 않으므로, 그것까지 원하면 아래 클론 배포를 쓰세요.
 
 ## 배포 (클론해서 직접 배포)
 
@@ -117,4 +123,10 @@ make verify-hooks       # hook이 올바르게 연결됐는지 확인
 
 ### 유틸리티
 
+- [setup](deploy/skills/setup/SKILL.md): 워크플로우가 기대하는 로컬 도구(`axe`·시뮬레이터·빌드 도구)를 점검하고 빠진 것만 설치
+- [axe](deploy/skills/axe/SKILL.md): iOS 시뮬레이터를 CLI로 구동하는 AXe 사용 가이드 (벤더링 — 출처는 [NOTICE](NOTICE))
 - [pre-exit](deploy/skills/pre-exit/README.md): 세션 종료 시 회고 및 스킬 개선
+
+## 에이전트
+
+워크플로우가 spawn하는 역할은 [deploy/agents](deploy/agents/)에 정의돼 있습니다. 모델과 도구 권한을 정의가 소유하므로, 메인 세션을 어떤 모델로 돌리든 기계적 대조는 Sonnet, 깊은 품질 판단은 Opus로 뜹니다. 리뷰어에는 Edit/Write를 주지 않아 구현과 검증이 분리됩니다.

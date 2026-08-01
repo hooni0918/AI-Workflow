@@ -6,8 +6,8 @@ import sys
 
 from settings_projection import build_hooks
 
-CATEGORIES = ["rules", "contexts", "hooks"]
-LEGACY_CATEGORIES = ["agents"]
+CATEGORIES = ["rules", "contexts", "hooks", "agents"]
+LEGACY_CATEGORIES = []
 SKILLS_PRESERVE = {
     ".system",
     "vercel-composition-patterns",
