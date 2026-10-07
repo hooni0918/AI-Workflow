@@ -81,7 +81,7 @@ IMPL 중 디자인 또는 기획이 바뀐 사실을 감지하면 캐시된 산�
 
 | 구현자 | 진실검사 A (메커니즘) | 규칙검사 B | 증분 단위 |
 |---|---|---|---|
-| Feature Implementer | 테스트 실행 green(swift test/xcodebuild test) + 테스트 TODO 커버리지. 오라클형(실행이 곧 판정). | Coding-Standards ×N (SwiftLint 포함) + Advanced (로직 rules) | 로직 커밋 |
+| Feature Implementer | 테스트 실행 green(swift test/xcodebuild test) + 테스트 TODO 커버리지. 종료 커버리지에 변이 검사 미해결 0건 추가(프로필 「테스트 품질 검사」 채택 시 — [test-quality](../../test-quality/SKILL.md)). 오라클형(실행이 곧 판정). | Coding-Standards ×N (SwiftLint 포함) + Advanced (로직 rules) | 로직 커밋 |
 
 ### Step 5.3.1. 슬라이스 사이클 종료
 
@@ -104,11 +104,13 @@ step-5.4 보고 출력 직후, 아래 두 안내를 **즉시** 출력한다 (ste
 ## Step 5.4. 마무리
 
 - 테스트 TODO 매칭 게이트 (IMPL 종료 시점) 적용 — 전체 todo가 구현된 test로 전환됐는지
+- **변이 검사** (프로필 「테스트 품질 검사」 채택 시) — 모든 슬라이스가 끝난 코드에 [test-quality](../../test-quality/SKILL.md)를 실행해 미해결 0건까지 수렴. 적용 수준이 필수면 미해결·미완료가 남은 채 종료하지 않는다. 미해결 처리 중 요구사항에 답이 없는 항목은 「Step 5.2.2」 기획 변경과 같이 사용자 결정으로 넘긴다
 - **TODO 잔존 점검** — 코드 안 `// TODO:` 형태 모두 0건 필수. 잔존 시 종료 불가 (PR 이연·외부 의존성은 `project.md`·`overview.md`로 관리)
 - Lead가 사용자에게 결과 보고
   - 커밋 목록 (stub + IMPL + 리뷰 수정 그대로)
   - 리뷰 결과 요약 (각 단계별 이슈 수 + 해결 내용)
   - **테스트 TODO 커버리지 (전체 todo 수 / 구현된 test 수)**
+  - **변이 검사 판정** (채택 시) — 검출·미해결·판단 기록 해소 수, 사용자 질문으로 넘긴 항목, 결과 파일 경로. 미채택·미완료는 그대로 보고
   - **다음 PR 진입 가능 안내** — 현 PR이 마지막이 아니면 다음 PR의 step-3 진입 가능을 안내 (step-5 종료 = 외부 공개 시그니처 확정). 단 step-6 사용자 리뷰에서 시그니처 변경 시 후속 PR도 영향 — 발생 시 즉시 보고
 
 > [CRITICAL] 이 보고가 끝나도 PR_{N}_IMPL 세션은 종료되지 않는다. 즉시 Step 6(최종 점검)에 진입한다.
