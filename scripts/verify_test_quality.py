@@ -605,6 +605,16 @@ class RunTests(unittest.TestCase):
         self.assertEqual(code, gate.EXIT_INCOMPLETE)
         self.assertIn("결과 파일을 만들지 않았습니다", result["incomplete_reasons"][0])
 
+    def test_module_command_overrides_tool_command(self):
+        config = base_config()
+        config["tool"]["command"] = [sys.executable, self.fake, "{report}", "crash"]
+        config["modules"][0]["command"] = [sys.executable, self.fake, "{report}", "Killed"]
+        config_path = os.path.join(self.outside.name, "config.json")
+        write_json(config_path, config)
+        code = gate.main(["run", "--config", config_path, "--repo", self.repo.path,
+                          "--out", self.result_path, "--work-dir", self.work_dir])
+        self.assertEqual(code, gate.EXIT_PASS)
+
     def test_tool_timeout_is_incomplete(self):
         code, _ = self.run_gate("sleep", timeout=1)
         self.assertEqual(code, gate.EXIT_INCOMPLETE)

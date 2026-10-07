@@ -67,6 +67,13 @@ def _norm_dir(path):
     return path.strip("/").replace("\\", "/")
 
 
+def _check_command(command, where):
+    if not command or not all(isinstance(part, str) for part in command):
+        raise ConfigError(f"{where} 는 문자열 목록이어야 합니다")
+    if "{report}" not in " ".join(command):
+        raise ConfigError(f"{where} 에 {{report}} 자리표시자가 있어야 합니다")
+
+
 def load_config(path):
     try:
         with open(path, encoding="utf-8") as handle:
@@ -92,11 +99,7 @@ def load_config(path):
     tool = _require(config, "tool", dict, "config")
     for key in ("name", "version"):
         _require(tool, key, str, "config.tool")
-    command = _require(tool, "command", list, "config.tool")
-    if not command or not all(isinstance(part, str) for part in command):
-        raise ConfigError("config.tool.command 는 문자열 목록이어야 합니다")
-    if "{report}" not in " ".join(command):
-        raise ConfigError("config.tool.command 에 {report} 자리표시자가 있어야 합니다")
+    _check_command(_require(tool, "command", list, "config.tool"), "config.tool.command")
     tool.setdefault("timeout_seconds", 7200)
 
     modules = _require(config, "modules", list, "config")
@@ -120,6 +123,9 @@ def load_config(path):
         baseline = _require(module, "baseline", list, where)
         if not baseline or not all(isinstance(part, str) for part in baseline):
             raise ConfigError(f"{where}.baseline 은 문자열 목록이어야 합니다")
+        if "command" in module:
+            # 한 앱에 시뮬레이터 모듈과 호스트(macOS) 모듈이 섞이면 도구 인자가 다르다
+            _check_command(module["command"], f"{where}.command")
         module.setdefault("vars", {})
         module.setdefault("fingerprint", [])
     return config
@@ -661,7 +667,7 @@ def run_gate(repo, config_path, config, base, work_dir, overrides):
                        "sources_path": os.path.join(repo, module["sources"][0])})
         try:
             baseline = [expand(part, values) for part in module["baseline"]]
-            command = [expand(part, values) for part in tool["command"]]
+            command = [expand(part, values) for part in module.get("command", tool["command"])]
             code = _run_logged(baseline, module_path, tool["timeout_seconds"],
                                os.path.join(work_dir, f"{name}.baseline.log"))
             if code != 0:
