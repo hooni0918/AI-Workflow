@@ -10,6 +10,7 @@
 # 종료 코드: 0 통과·해당 없음 / 1 미해결 있음 / 2 검사 미완료 / 3 설정·사용 오류
 import argparse
 import fnmatch
+import hashlib
 import json
 import os
 import re
@@ -326,6 +327,154 @@ def load_report(path, repo, roots, known_files):
             except (KeyError, TypeError, ValueError):
                 raise IncompleteError(f"변이 항목 형식 불일치: {path}")
     return mutants, unresolved_keys
+
+
+# 판단 기록 종류 → 그 기록으로 해소할 수 있는 상태. 종류와 상태가 맞지 않으면 해소하지 않는다.
+DECISION_KINDS = {
+    "equivalent": {"Survived", "NoCoverage"},
+    "hang_detected": {"Timeout"},
+    "crash_detected": {"RuntimeError"},
+    "ignore_approved": {"Ignored"},
+}
+
+HINTS = {
+    "Survived": "요구사항과 대조해 테스트 누락·약한 단언인지 판단하고 보강한다",
+    "NoCoverage": "이 지점을 실행하는 테스트를 보강한다",
+    "Timeout": "제한 시간을 늘려 다시 돌리거나, 변이가 무한 반복을 만든 근거를 판단 기록으로 남긴다",
+    "RuntimeError": "다시 돌려도 같으면 근거를 판단 기록으로 남긴다",
+    "Ignored": "제외 주석·설정을 걷어내거나, 승인된 판단 기록을 남긴다",
+}
+
+# 바뀐 줄에 이런 연산자가 보이는데 그 파일 변이가 하나도 없으면, 도구가 파일을 분석했다는
+# 근거가 없다고 본다. Swift·Dart 공통 표기만 쓴다.
+_MUTABLE_TOKEN = re.compile(r"==|!=|>=|<=|&&|\|\|| > | < |\btrue\b|\bfalse\b")
+
+
+def _read_lines(repo, rel):
+    try:
+        with open(os.path.join(repo, rel), encoding="utf-8") as handle:
+            return handle.read().splitlines()
+    except OSError:
+        return []
+
+
+def mutant_key(repo, mutant, cache=None):
+    # 판단 기록을 줄 번호가 아니라 원래 줄 내용에 묶는다. 위쪽 코드가 바뀌어 줄 번호가 밀려도
+    # 기록이 따라가고, 그 줄 자체가 바뀌면 기록이 떨어져 다시 판단하게 된다.
+    if cache is not None and mutant["file"] in cache:
+        lines = cache[mutant["file"]]
+    else:
+        lines = _read_lines(repo, mutant["file"])
+        if cache is not None:
+            cache[mutant["file"]] = lines
+    index = mutant["start_line"] - 1
+    text = lines[index] if 0 <= index < len(lines) else ""
+    stripped = text.strip()
+    column = mutant["start_column"] - (len(text) - len(text.lstrip()))
+    raw = "\0".join([mutant["file"], stripped, str(column), mutant["mutator"], mutant["replacement"]])
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16], stripped
+
+
+def load_decisions(path):
+    # 판단 기록 파일. 없으면 빈 목록. 형식이 틀린 항목은 쓰지 않고 따로 보고한다 —
+    # 근거·승인자 없는 기록이 해소로 새면 "사람만 승인" 기준이 무너진다.
+    if not os.path.exists(path):
+        return [], []
+    try:
+        with open(path, encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (OSError, json.JSONDecodeError) as error:
+        raise IncompleteError(f"판단 기록 파일을 읽을 수 없습니다: {path} ({error})")
+    entries = data.get("decisions", []) if isinstance(data, dict) else []
+    valid, invalid = [], []
+    for entry in entries:
+        ok = (isinstance(entry, dict)
+              and isinstance(entry.get("key"), str) and entry["key"]
+              and entry.get("kind") in DECISION_KINDS
+              and isinstance(entry.get("reason"), str) and entry["reason"].strip()
+              and isinstance(entry.get("approved_by"), str) and entry["approved_by"].strip())
+        (valid if ok else invalid).append(entry)
+    return valid, invalid
+
+
+def _in_scope(mutant, lines):
+    if lines == "all":
+        return True
+    return any(mutant["start_line"] <= n <= mutant["end_line"] for n in lines)
+
+
+def _code_part(line):
+    return line.split("//", 1)[0]
+
+
+def judge(repo, plan, mutants, module_mutant_counts, decisions):
+    # 계획된 범위와 변이 결과를 test-quality.md 「상태별 판정」으로 판정한다.
+    by_key = {d["key"]: d for d in decisions}
+    used_keys = set()
+    cache = {}
+    result = {"detected": [], "unresolved": [], "resolved": [], "invalid_mutants": 0,
+              "out_of_scope": 0, "no_mutants": [], "incomplete_reasons": []}
+    any_target = False
+
+    for path in plan["unmapped"]:
+        result["incomplete_reasons"].append(f"검사 설정 밖의 로직 파일이 바뀌었습니다: {path}")
+
+    for name, entry in plan["modules"].items():
+        if not entry["targets"]:
+            continue
+        any_target = True
+        if module_mutant_counts.get(name, 0) == 0:
+            result["incomplete_reasons"].append(
+                f"모듈 {name}: 도구가 변이를 하나도 만들지 않았습니다 — 분석했다는 근거가 없습니다")
+            continue
+        in_scope_total, compile_errors = 0, 0
+        for path, lines in entry["targets"].items():
+            file_mutants = [m for m in mutants if m["file"] == path]
+            in_scope = [m for m in file_mutants if _in_scope(m, lines)]
+            result["out_of_scope"] += len(file_mutants) - len(in_scope)
+            if not in_scope:
+                source = _read_lines(repo, path)
+                numbers = range(1, len(source) + 1) if lines == "all" else lines
+                if any(_MUTABLE_TOKEN.search(_code_part(source[n - 1]))
+                       for n in numbers if 0 < n <= len(source)):
+                    result["incomplete_reasons"].append(
+                        f"{path}: 바뀐 줄에 변이할 연산자가 보이는데 결과가 없습니다")
+                else:
+                    result["no_mutants"].append(path)
+                continue
+            for mutant in in_scope:
+                in_scope_total += 1
+                status = mutant["status"]
+                key, text = mutant_key(repo, mutant, cache)
+                item = dict(mutant, key=key, line_text=text)
+                if status == "Killed":
+                    result["detected"].append(item)
+                elif status == "CompileError":
+                    compile_errors += 1
+                    result["invalid_mutants"] += 1
+                elif status == "Pending":
+                    result["incomplete_reasons"].append(f"{path}:{mutant['start_line']} 변이가 실행되지 않았습니다(Pending)")
+                else:
+                    decision = by_key.get(key)
+                    if decision and status in DECISION_KINDS[decision["kind"]]:
+                        used_keys.add(key)
+                        result["resolved"].append(dict(item, decision=decision))
+                    else:
+                        result["unresolved"].append(dict(item, hint=HINTS[status]))
+        if in_scope_total and in_scope_total == compile_errors:
+            result["incomplete_reasons"].append(
+                f"모듈 {name}: 범위 안 변이가 모두 컴파일 실패라 실제로 검사한 것이 없습니다")
+
+    result["stale_decisions"] = [d["key"] for d in decisions if d["key"] not in used_keys]
+    if result["incomplete_reasons"]:
+        result["verdict"] = "incomplete"
+    elif result["unresolved"]:
+        result["verdict"] = "fail"
+    elif not any_target:
+        result["verdict"] = "not_applicable"
+    else:
+        result["verdict"] = "pass"
+    return result
 
 
 def main(argv=None):

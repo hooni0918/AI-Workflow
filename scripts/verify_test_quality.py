@@ -319,5 +319,132 @@ class ReportTests(unittest.TestCase):
             gate.load_report(self.report, self.repo, [], self.KNOWN)
 
 
+WALLET_PATH = "Packages/Wallet/Sources/Wallet/Wallet.swift"
+LABELS_PATH = "Packages/Wallet/Sources/Wallet/Labels.swift"
+
+
+def mutant(line, status, mutator="RelationalOperatorReplacement", replacement=">", column=9, path=WALLET_PATH):
+    return {"file": path, "start_line": line, "start_column": column, "end_line": line,
+            "mutator": mutator, "replacement": replacement, "status": status}
+
+
+def one_module_plan(targets, unmapped=()):
+    return {"modules": {"Wallet": {"targets": targets, "widened": False,
+                                   "source_changed": list(targets), "test_changed": []}},
+            "unmapped": list(unmapped), "ignored": [], "other": []}
+
+
+class JudgeTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.repo = self.tmp.name
+        for rel, content in ((WALLET_PATH, WALLET), (LABELS_PATH, LABELS)):
+            os.makedirs(os.path.dirname(os.path.join(self.repo, rel)), exist_ok=True)
+            with open(os.path.join(self.repo, rel), "w", encoding="utf-8") as handle:
+                handle.write(content)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def judge(self, targets, mutants, decisions=(), counts=None, unmapped=()):
+        counts = {"Wallet": len(mutants)} if counts is None else counts
+        return gate.judge(self.repo, one_module_plan(targets, unmapped), list(mutants), counts, list(decisions))
+
+    def decision(self, m, kind="equivalent", **extra):
+        key, _ = gate.mutant_key(self.repo, m)
+        entry = {"key": key, "kind": kind, "reason": "앞 분기가 같은 값을 이미 걸러 동작이 같다",
+                 "approved_by": "reviewer"}
+        entry.update(extra)
+        return entry
+
+    def test_all_killed_passes(self):
+        result = self.judge({WALLET_PATH: [5]}, [mutant(5, "Killed")])
+        self.assertEqual(result["verdict"], "pass")
+
+    def test_survived_fails_with_hint(self):
+        result = self.judge({WALLET_PATH: [5]}, [mutant(5, "Survived")])
+        self.assertEqual(result["verdict"], "fail")
+        self.assertIn("요구사항", result["unresolved"][0]["hint"])
+        self.assertEqual(result["unresolved"][0]["line_text"], "if amount > 0 && balance >= amount {")
+
+    def test_approved_equivalent_decision_resolves(self):
+        m = mutant(5, "Survived")
+        result = self.judge({WALLET_PATH: [5]}, [m], [self.decision(m)])
+        self.assertEqual(result["verdict"], "pass")
+        self.assertEqual(len(result["resolved"]), 1)
+
+    def test_decision_kind_must_match_status(self):
+        m = mutant(5, "Survived")
+        result = self.judge({WALLET_PATH: [5]}, [m], [self.decision(m, kind="hang_detected")])
+        self.assertEqual(result["verdict"], "fail")
+
+    def test_timeout_needs_hang_decision(self):
+        m = mutant(5, "Timeout")
+        self.assertEqual(self.judge({WALLET_PATH: [5]}, [m])["verdict"], "fail")
+        result = self.judge({WALLET_PATH: [5]}, [m], [self.decision(m, kind="hang_detected")])
+        self.assertEqual(result["verdict"], "pass")
+
+    def test_decision_key_survives_line_shift_but_not_line_edit(self):
+        m = mutant(5, "Survived")
+        key, _ = gate.mutant_key(self.repo, m)
+        path = os.path.join(self.repo, WALLET_PATH)
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write("// header\n" + WALLET)
+        self.assertEqual(gate.mutant_key(self.repo, mutant(6, "Survived"))[0], key)
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write("// header\n" + WALLET.replace("amount > 0", "amount > 1"))
+        self.assertNotEqual(gate.mutant_key(self.repo, mutant(6, "Survived"))[0], key)
+
+    def test_out_of_scope_mutants_are_not_judged(self):
+        result = self.judge({WALLET_PATH: [5]}, [mutant(5, "Killed"), mutant(9, "Survived")])
+        self.assertEqual(result["verdict"], "pass")
+        self.assertEqual(result["out_of_scope"], 1)
+
+    def test_no_mutants_in_whole_module_is_incomplete(self):
+        result = self.judge({WALLET_PATH: [5]}, [], counts={"Wallet": 0})
+        self.assertEqual(result["verdict"], "incomplete")
+
+    def test_missing_results_for_line_with_operators_is_incomplete(self):
+        # 실측: 도구가 대상 파일을 분석하지 않고 변이 0개·점수 100% 를 낸 경우
+        result = self.judge({WALLET_PATH: [5], LABELS_PATH: "all"},
+                            [mutant(1, "Killed", path=LABELS_PATH)])
+        self.assertEqual(result["verdict"], "incomplete")
+
+    def test_file_without_mutable_operators_is_not_applicable_file(self):
+        result = self.judge({WALLET_PATH: [5], LABELS_PATH: [2]}, [mutant(5, "Killed")])
+        self.assertEqual(result["verdict"], "pass")
+        self.assertEqual(result["no_mutants"], [LABELS_PATH])
+
+    def test_operators_only_in_comments_do_not_block(self):
+        path = os.path.join(self.repo, LABELS_PATH)
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write("// balance >= amount\npublic enum Labels {}\n")
+        result = self.judge({WALLET_PATH: [5], LABELS_PATH: [1]}, [mutant(5, "Killed")])
+        self.assertEqual(result["verdict"], "pass")
+
+    def test_only_compile_errors_is_incomplete(self):
+        result = self.judge({WALLET_PATH: [5]}, [mutant(5, "CompileError")])
+        self.assertEqual(result["verdict"], "incomplete")
+
+    def test_pending_is_incomplete(self):
+        result = self.judge({WALLET_PATH: [5]}, [mutant(5, "Killed"), mutant(5, "Pending", replacement="<")])
+        self.assertEqual(result["verdict"], "incomplete")
+
+    def test_unmapped_logic_change_is_incomplete(self):
+        result = self.judge({WALLET_PATH: [5]}, [mutant(5, "Killed")], unmapped=["Tools/Gen.swift"])
+        self.assertEqual(result["verdict"], "incomplete")
+
+    def test_nothing_in_scope_is_not_applicable(self):
+        result = gate.judge(self.repo, one_module_plan({}), [], {}, [])
+        self.assertEqual(result["verdict"], "not_applicable")
+
+    def test_decision_without_approver_is_rejected(self):
+        tmp = os.path.join(self.repo, "decisions.json")
+        m = mutant(5, "Survived")
+        write_json(tmp, {"decisions": [self.decision(m, approved_by=" ")]})
+        valid, invalid = gate.load_decisions(tmp)
+        self.assertEqual((len(valid), len(invalid)), (0, 1))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)
