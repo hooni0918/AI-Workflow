@@ -501,6 +501,18 @@ class ResultAndVerifyTests(unittest.TestCase):
     def test_missing_result_is_incomplete(self):
         self.assertEqual(self.verify_cli(), gate.EXIT_INCOMPLETE)
 
+    def test_unresolved_output_shows_original_operator_and_column(self):
+        import io
+        report = stryker_report("Sources/Wallet/Wallet.swift", [(5, "ROR", ">", "Survived", 34)])
+        report["files"]["Sources/Wallet/Wallet.swift"]["mutants"][0]["originalText"] = ">="
+        write_json(self.report_path, report)
+        result = gate.judge_reports(self.repo.path, self.config_path, self.config,
+                                    gate.plan_scope(self.repo.path, self.config),
+                                    {"Wallet": self.report_path})
+        buffer = io.StringIO()
+        gate.print_result(result, out=buffer)
+        self.assertIn("Wallet.swift:5:34 ROR >= → >", buffer.getvalue())
+
     def test_module_in_scope_without_report_is_incomplete(self):
         self.assertEqual(self.judge_cli("Killed", extra_reports=False), gate.EXIT_INCOMPLETE)
         with open(self.result_path, encoding="utf-8") as handle:

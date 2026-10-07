@@ -322,6 +322,7 @@ def load_report(path, repo, roots, known_files):
                     "start_column": int(start["column"]),
                     "end_line": int(end["line"]),
                     "mutator": str(raw["mutatorName"]),
+                    "original": str(raw.get("originalText", "")),
                     "replacement": str(raw.get("replacement", "")),
                     "status": status,
                 })
@@ -525,7 +526,8 @@ def fingerprint(repo, config_path, config, plan):
 
 def build_result(config, plan, judged, fingerprint_value):
     def brief(item):
-        keys = ("key", "file", "start_line", "mutator", "replacement", "status", "line_text", "hint")
+        keys = ("key", "file", "start_line", "start_column", "mutator", "original", "replacement",
+                "status", "line_text", "hint")
         return {k: item[k] for k in keys if k in item}
 
     return {
@@ -570,8 +572,11 @@ def print_result(result, out=sys.stdout):
     for reason in result["incomplete_reasons"]:
         print(f"  미완료: {reason}", file=out)
     for item in result["unresolved"]:
-        print(f"  미해결 {item['file']}:{item['start_line']} {item['mutator']} → {item['replacement']} "
-              f"[{item['status']}] key={item['key']}\n      {item['line_text']}\n      {item['hint']}", file=out)
+        # 한 줄에 같은 종류 연산자가 여럿일 수 있어 원래 표기와 열 번호를 함께 보인다
+        change = f"{item.get('original') or '?'} → {item['replacement'] or '(삭제)'}"
+        print(f"  미해결 {item['file']}:{item['start_line']}:{item.get('start_column', '?')} "
+              f"{item['mutator']} {change} [{item['status']}] key={item['key']}\n"
+              f"      {item['line_text']}\n      {item['hint']}", file=out)
     for path in result["no_mutants"]:
         print(f"  변이 지점 없음(해당 없음): {path}", file=out)
     if result["stale_decisions"]:
