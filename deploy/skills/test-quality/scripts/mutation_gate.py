@@ -477,6 +477,170 @@ def judge(repo, plan, mutants, module_mutant_counts, decisions):
     return result
 
 
+def _digest(path):
+    try:
+        with open(path, "rb") as handle:
+            return hashlib.sha256(handle.read()).hexdigest()
+    except FileNotFoundError:
+        return "absent"
+
+
+def _walk_files(repo, rel_dir):
+    root = os.path.join(repo, rel_dir)
+    for dirpath, _, filenames in os.walk(root):
+        for filename in filenames:
+            yield os.path.relpath(os.path.join(dirpath, filename), repo).replace(os.sep, "/")
+
+
+def fingerprint(repo, config_path, config, plan):
+    # 결과를 검사 당시의 소스·테스트·설정·판단 기록 내용에 묶는다. 검사 뒤 하나라도 바뀌면
+    # 값이 달라져 이전 결과는 무효가 된다. 커밋 해시가 아니라 내용을 쓰므로 커밋 정리(rebase·
+    # squash)만으로는 무효가 되지 않고, 미커밋 수정은 잡는다.
+    digest = hashlib.sha256()
+
+    def feed(label, value):
+        digest.update(label.encode("utf-8") + b"\0" + value.encode("utf-8") + b"\n")
+
+    feed("runner", RUNNER_VERSION)
+    feed("config", _digest(config_path))
+    feed("decisions", _digest(os.path.join(repo, config["decisions"])))
+    scope = {name: {"targets": e["targets"], "widened": e["widened"]}
+             for name, e in plan["modules"].items()}
+    feed("scope", json.dumps({"modules": scope, "unmapped": plan["unmapped"]}, sort_keys=True))
+    for module in config["modules"]:
+        entry = plan["modules"][module["name"]]
+        if not (entry["targets"] or entry["source_changed"] or entry["test_changed"]):
+            continue
+        files = set(module["fingerprint"])
+        for rel_dir in module["sources"] + module["tests"]:
+            files.update(_walk_files(repo, rel_dir))
+        for rel in sorted(files):
+            feed(rel, _digest(os.path.join(repo, rel)))
+    return digest.hexdigest()
+
+
+def build_result(config, plan, judged, fingerprint_value):
+    def brief(item):
+        keys = ("key", "file", "start_line", "mutator", "replacement", "status", "line_text", "hint")
+        return {k: item[k] for k in keys if k in item}
+
+    return {
+        "runner_version": RUNNER_VERSION,
+        "tool": {"name": config["tool"]["name"], "version": config["tool"]["version"]},
+        "verdict": judged["verdict"],
+        "fingerprint": fingerprint_value,
+        "merge_base": plan["merge_base"],
+        "scope": {
+            "modules": {name: {"targets": e["targets"], "widened": e["widened"]}
+                        for name, e in plan["modules"].items() if e["targets"]},
+            "unmapped": plan["unmapped"], "ignored": plan["ignored"], "other": plan["other"],
+        },
+        "summary": {
+            "detected": len(judged["detected"]), "unresolved": len(judged["unresolved"]),
+            "resolved_by_decision": len(judged["resolved"]),
+            "compile_errors": judged["invalid_mutants"], "out_of_scope": judged["out_of_scope"],
+        },
+        "unresolved": [brief(m) for m in judged["unresolved"]],
+        "resolved": [dict(brief(m), reason=m["decision"]["reason"],
+                          approved_by=m["decision"]["approved_by"]) for m in judged["resolved"]],
+        "no_mutants": judged["no_mutants"],
+        "incomplete_reasons": judged["incomplete_reasons"],
+        "invalid_decisions": judged.get("invalid_decisions", 0),
+        "stale_decisions": judged["stale_decisions"],
+    }
+
+
+VERDICT_EXIT = {"pass": EXIT_PASS, "not_applicable": EXIT_PASS, "fail": EXIT_UNRESOLVED,
+                "incomplete": EXIT_INCOMPLETE}
+
+VERDICT_LABEL = {"pass": "통과 — 범위 안 미해결 0건", "not_applicable": "해당 없음 — 검사할 로직 변경이 없음",
+                 "fail": "미해결 있음", "incomplete": "검사 미완료 — 성공으로 처리하지 않는다"}
+
+
+def print_result(result, out=sys.stdout):
+    print(f"[test-quality] {VERDICT_LABEL[result['verdict']]}", file=out)
+    summary = result["summary"]
+    print(f"  검출 {summary['detected']} · 미해결 {summary['unresolved']} · 판단 기록 해소 "
+          f"{summary['resolved_by_decision']} · 컴파일 실패 제외 {summary['compile_errors']} · "
+          f"범위 밖 {summary['out_of_scope']}", file=out)
+    for reason in result["incomplete_reasons"]:
+        print(f"  미완료: {reason}", file=out)
+    for item in result["unresolved"]:
+        print(f"  미해결 {item['file']}:{item['start_line']} {item['mutator']} → {item['replacement']} "
+              f"[{item['status']}] key={item['key']}\n      {item['line_text']}\n      {item['hint']}", file=out)
+    for path in result["no_mutants"]:
+        print(f"  변이 지점 없음(해당 없음): {path}", file=out)
+    if result["stale_decisions"]:
+        print(f"  맞는 변이가 없는 판단 기록: {', '.join(result['stale_decisions'])}", file=out)
+
+
+def write_result(path, result):
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump(result, handle, ensure_ascii=False, indent=2)
+        handle.write("\n")
+
+
+def known_logic_files(repo, config):
+    files = []
+    for module in config["modules"]:
+        files.extend(_module_logic_files(repo, module, config))
+    return files
+
+
+def judge_reports(repo, config_path, config, plan, reports):
+    # reports: {모듈 이름: 결과 파일 경로}. 범위가 있는 모듈의 결과가 없으면 미완료다.
+    decisions, invalid = load_decisions(os.path.join(repo, config["decisions"]))
+    known = known_logic_files(repo, config)
+    mutants, counts, extra = [], {}, []
+    for module in config["modules"]:
+        name = module["name"]
+        if not plan["modules"][name]["targets"]:
+            continue
+        if name not in reports:
+            extra.append(f"모듈 {name}: 변이 결과가 없습니다")
+            counts[name] = 0
+            continue
+        loaded, _ = load_report(reports[name], repo, [os.path.join(repo, module["path"])], known)
+        mutants.extend(loaded)
+        counts[name] = len(loaded)
+    judged = judge(repo, plan, mutants, counts, decisions)
+    judged["invalid_decisions"] = len(invalid)
+    if extra:
+        judged["incomplete_reasons"] = extra + judged["incomplete_reasons"]
+        judged["verdict"] = "incomplete"
+    return build_result(config, plan, judged, fingerprint(repo, config_path, config, plan))
+
+
+def verify(repo, config_path, config, result_path, base=None):
+    # 저장된 결과가 지금 코드에 대해 유효한 통과인지 확인한다. 결과 없음·오래된 결과는 미완료.
+    if not os.path.exists(result_path):
+        return EXIT_INCOMPLETE, "결과 파일이 없습니다 — 검사를 실행하지 않았습니다"
+    try:
+        with open(result_path, encoding="utf-8") as handle:
+            result = json.load(handle)
+    except (OSError, json.JSONDecodeError) as error:
+        return EXIT_INCOMPLETE, f"결과 파일을 읽을 수 없습니다 ({error})"
+    plan = plan_scope(repo, config, base)
+    current = fingerprint(repo, config_path, config, plan)
+    if result.get("fingerprint") != current:
+        return EXIT_INCOMPLETE, "결과가 오래됐습니다 — 검사 뒤 코드·테스트·설정·판단 기록이 바뀌었습니다"
+    verdict = result.get("verdict")
+    if verdict not in VERDICT_EXIT:
+        return EXIT_INCOMPLETE, f"알 수 없는 판정 {verdict!r}"
+    return VERDICT_EXIT[verdict], VERDICT_LABEL[verdict]
+
+
+def _parse_reports(values):
+    reports = {}
+    for value in values or []:
+        name, sep, path = value.partition("=")
+        if not sep or not name or not path:
+            raise ConfigError(f"--report 는 모듈=경로 형식이어야 합니다: {value}")
+        reports[name] = os.path.abspath(path)
+    return reports
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="변이 검사 게이트")
     parser.add_argument("--version", action="version", version=RUNNER_VERSION)
@@ -487,6 +651,17 @@ def main(argv=None):
     plan_parser.add_argument("--config", required=True)
     plan_parser.add_argument("--repo", default=".")
     plan_parser.add_argument("--base")
+    judge_parser = sub.add_parser("judge", help="이미 만든 변이 결과(Stryker 형식)를 판정해 결과 파일을 쓴다")
+    judge_parser.add_argument("--config", required=True)
+    judge_parser.add_argument("--repo", default=".")
+    judge_parser.add_argument("--base")
+    judge_parser.add_argument("--report", action="append", metavar="모듈=경로")
+    judge_parser.add_argument("--out", required=True)
+    verify_parser = sub.add_parser("verify", help="저장된 결과가 지금 코드에 대해 유효한 통과인지 확인한다")
+    verify_parser.add_argument("--config", required=True)
+    verify_parser.add_argument("--repo", default=".")
+    verify_parser.add_argument("--base")
+    verify_parser.add_argument("--result", required=True)
     args = parser.parse_args(argv)
 
     try:
@@ -499,6 +674,21 @@ def main(argv=None):
             print(json.dumps(plan_scope(os.path.abspath(args.repo), config, args.base),
                              ensure_ascii=False, indent=2))
             return EXIT_PASS
+        if args.command == "judge":
+            repo = os.path.abspath(args.repo)
+            config = load_config(args.config)
+            plan = plan_scope(repo, config, args.base)
+            result = judge_reports(repo, os.path.abspath(args.config), config, plan,
+                                   _parse_reports(args.report))
+            write_result(args.out, result)
+            print_result(result)
+            return VERDICT_EXIT[result["verdict"]]
+        if args.command == "verify":
+            repo = os.path.abspath(args.repo)
+            config = load_config(args.config)
+            code, message = verify(repo, os.path.abspath(args.config), config, args.result, args.base)
+            print(f"[test-quality] {message}")
+            return code
     except ConfigError as error:
         print(f"설정 오류: {error}", file=sys.stderr)
         return EXIT_USAGE

@@ -446,5 +446,66 @@ class JudgeTests(unittest.TestCase):
         self.assertEqual((len(valid), len(invalid)), (0, 1))
 
 
+class ResultAndVerifyTests(unittest.TestCase):
+    def setUp(self):
+        self.repo = GitRepo(BASE_FILES)
+        self.outside = tempfile.TemporaryDirectory()
+        self.config_path = os.path.join(self.outside.name, "config.json")
+        config = base_config()
+        config["modules"][0]["fingerprint"] = ["Packages/Wallet/Package.swift"]
+        write_json(self.config_path, config)
+        self.config = gate.load_config(self.config_path)
+        self.result_path = os.path.join(self.outside.name, "result.json")
+        self.report_path = os.path.join(self.outside.name, "report.json")
+        self.repo.write(WALLET_PATH, WALLET.replace("amount > 0", "amount >= 1"))
+        self.repo.commit("change")
+
+    def tearDown(self):
+        self.repo.cleanup()
+        self.outside.cleanup()
+
+    def judge_cli(self, status, extra_reports=True):
+        write_json(self.report_path, stryker_report("Sources/Wallet/Wallet.swift", [(5, "ROR", ">", status)]))
+        args = ["judge", "--config", self.config_path, "--repo", self.repo.path, "--out", self.result_path]
+        if extra_reports:
+            args += ["--report", f"Wallet={self.report_path}"]
+        return gate.main(args)
+
+    def verify_cli(self):
+        return gate.main(["verify", "--config", self.config_path, "--repo", self.repo.path,
+                          "--result", self.result_path])
+
+    def test_pass_then_verify_passes(self):
+        self.assertEqual(self.judge_cli("Killed"), gate.EXIT_PASS)
+        self.assertEqual(self.verify_cli(), gate.EXIT_PASS)
+
+    def test_survivor_fails_and_verify_reports_fail(self):
+        self.assertEqual(self.judge_cli("Survived"), gate.EXIT_UNRESOLVED)
+        self.assertEqual(self.verify_cli(), gate.EXIT_UNRESOLVED)
+
+    def test_test_edit_after_check_makes_result_stale(self):
+        self.judge_cli("Killed")
+        self.repo.write("Packages/Wallet/Tests/WalletTests/WalletTests.swift", WALLET_TEST + "// weaker\n")
+        self.assertEqual(self.verify_cli(), gate.EXIT_INCOMPLETE)
+
+    def test_decision_edit_after_check_makes_result_stale(self):
+        self.judge_cli("Killed")
+        write_json(os.path.join(self.repo.path, ".test-quality/decisions.json"), {"decisions": []})
+        self.assertEqual(self.verify_cli(), gate.EXIT_INCOMPLETE)
+
+    def test_commit_rewrite_without_content_change_stays_valid(self):
+        self.judge_cli("Killed")
+        self.repo.git("commit", "-q", "--amend", "-m", "reworded")
+        self.assertEqual(self.verify_cli(), gate.EXIT_PASS)
+
+    def test_missing_result_is_incomplete(self):
+        self.assertEqual(self.verify_cli(), gate.EXIT_INCOMPLETE)
+
+    def test_module_in_scope_without_report_is_incomplete(self):
+        self.assertEqual(self.judge_cli("Killed", extra_reports=False), gate.EXIT_INCOMPLETE)
+        with open(self.result_path, encoding="utf-8") as handle:
+            self.assertIn("변이 결과가 없습니다", handle.read())
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)
