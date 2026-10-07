@@ -5,6 +5,7 @@
 # 범위 누락이 통과로 새는지를 실제 git 저장소와 가짜 도구로 재현해 확인한다.
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -43,6 +44,78 @@ def write_json(path, value):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as handle:
         json.dump(value, handle)
+
+
+WALLET = """public struct Wallet {
+    public private(set) var balance: Int
+
+    public mutating func pay(_ amount: Int) -> Bool {
+        if amount > 0 && balance >= amount {
+            balance -= amount
+            return true
+        }
+        return false
+    }
+}
+"""
+
+LABELS = 'public enum Labels {\n    public static let title = "wallet"\n}\n'
+
+WALLET_TEST = "import Testing\n@testable import Wallet\n\n@Test func pays() {}\n"
+
+
+class GitRepo:
+    # 임시 git 저장소. main 에 기준 커밋을 만들고 feature 브랜치로 옮겨 변경을 쌓는다.
+    def __init__(self, files):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.path = self.tmp.name
+        self.git("init", "-q", "-b", "main")
+        for rel, content in files.items():
+            self.write(rel, content)
+        self.commit("base")
+        self.git("checkout", "-q", "-b", "feature")
+
+    def git(self, *args):
+        return subprocess.run(
+            ["git", "-c", "core.hooksPath=/dev/null", "-c", "user.email=t@t", "-c", "user.name=t",
+             "-C", self.path, *args],
+            check=True, capture_output=True, text=True,
+        ).stdout
+
+    def write(self, rel, content):
+        full = os.path.join(self.path, rel)
+        os.makedirs(os.path.dirname(full), exist_ok=True)
+        with open(full, "w", encoding="utf-8") as handle:
+            handle.write(content)
+
+    def commit(self, message):
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", message)
+
+    def cleanup(self):
+        self.tmp.cleanup()
+
+
+BASE_FILES = {
+    "Packages/Wallet/Sources/Wallet/Wallet.swift": WALLET,
+    "Packages/Wallet/Sources/Wallet/Labels.swift": LABELS,
+    "Packages/Wallet/Tests/WalletTests/WalletTests.swift": WALLET_TEST,
+    "Packages/Wallet/Package.swift": "// manifest\n",
+    "App/Screen.swift": "struct Screen {}\n",
+    "README.md": "readme\n",
+}
+
+
+def loaded_config(**overrides):
+    config = base_config(**overrides)
+    config["modules"][0]["fingerprint"] = ["Packages/Wallet/Package.swift"]
+    tmp = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False)
+    json.dump(config, tmp)
+    tmp.close()
+    try:
+        return gate.load_config(tmp.name)
+    finally:
+        os.unlink(tmp.name)
 
 
 class ConfigTests(unittest.TestCase):
@@ -103,6 +176,83 @@ class ExpandTests(unittest.TestCase):
         os.environ.pop("TQ_TEST_MISSING", None)
         with self.assertRaises(gate.ConfigError):
             gate.expand("{env:TQ_TEST_MISSING}", {})
+
+
+class PlanScopeTests(unittest.TestCase):
+    def setUp(self):
+        self.repo = GitRepo(BASE_FILES)
+        self.config = loaded_config()
+
+    def tearDown(self):
+        self.repo.cleanup()
+
+    def plan(self, **kwargs):
+        return gate.plan_scope(self.repo.path, self.config, **kwargs)
+
+    def test_source_change_targets_only_changed_lines(self):
+        self.repo.write("Packages/Wallet/Sources/Wallet/Wallet.swift",
+                        WALLET.replace("balance >= amount", "balance > amount"))
+        self.repo.commit("boundary")
+        module = self.plan()["modules"]["Wallet"]
+        self.assertEqual(module["targets"], {"Packages/Wallet/Sources/Wallet/Wallet.swift": [5]})
+        self.assertFalse(module["widened"])
+
+    def test_test_only_change_widens_to_whole_module(self):
+        self.repo.write("Packages/Wallet/Tests/WalletTests/WalletTests.swift", WALLET_TEST + "// more\n")
+        self.repo.commit("tests")
+        module = self.plan()["modules"]["Wallet"]
+        self.assertTrue(module["widened"])
+        self.assertEqual(module["targets"], {
+            "Packages/Wallet/Sources/Wallet/Labels.swift": "all",
+            "Packages/Wallet/Sources/Wallet/Wallet.swift": "all",
+        })
+
+    def test_source_and_test_change_does_not_widen(self):
+        self.repo.write("Packages/Wallet/Sources/Wallet/Wallet.swift", WALLET.replace("return true", "return  true"))
+        self.repo.write("Packages/Wallet/Tests/WalletTests/WalletTests.swift", WALLET_TEST + "// more\n")
+        self.repo.commit("both")
+        module = self.plan()["modules"]["Wallet"]
+        self.assertFalse(module["widened"])
+        self.assertEqual(list(module["targets"]), ["Packages/Wallet/Sources/Wallet/Wallet.swift"])
+
+    def test_uncommitted_and_untracked_changes_are_included(self):
+        self.repo.write("Packages/Wallet/Sources/Wallet/New.swift", "let x = 1 > 0\n")
+        self.repo.write("Packages/Wallet/Sources/Wallet/Wallet.swift", WALLET.replace("amount > 0", "amount >= 0"))
+        targets = self.plan()["modules"]["Wallet"]["targets"]
+        self.assertEqual(targets["Packages/Wallet/Sources/Wallet/New.swift"], "all")
+        self.assertEqual(targets["Packages/Wallet/Sources/Wallet/Wallet.swift"], [5])
+
+    def test_unmapped_ignored_and_other_are_separated(self):
+        self.repo.write("App/Screen.swift", "struct Screen { let a = 1 }\n")
+        self.repo.write("Tools/Gen.swift", "let gen = 1\n")
+        self.repo.write("README.md", "changed\n")
+        self.repo.write("Packages/Wallet/Package.swift", "// manifest 2\n")
+        self.repo.commit("misc")
+        self.config["ignore"] = ["App/**"]
+        plan = self.plan()
+        self.assertEqual(plan["unmapped"], ["Tools/Gen.swift"])
+        self.assertEqual(plan["ignored"], ["App/Screen.swift"])
+        self.assertEqual(plan["other"], ["README.md"])
+        self.assertEqual(plan["modules"]["Wallet"]["targets"], {})
+
+    def test_deletion_only_hunk_targets_neighbor_lines(self):
+        self.repo.write("Packages/Wallet/Sources/Wallet/Wallet.swift",
+                        WALLET.replace("            balance -= amount\n", ""))
+        self.repo.commit("drop line")
+        targets = self.plan()["modules"]["Wallet"]["targets"]
+        self.assertEqual(targets["Packages/Wallet/Sources/Wallet/Wallet.swift"], [5, 6])
+
+    def test_deleted_source_counts_as_source_change_without_targets(self):
+        self.repo.git("rm", "-q", "Packages/Wallet/Sources/Wallet/Labels.swift")
+        self.repo.commit("delete")
+        module = self.plan()["modules"]["Wallet"]
+        self.assertEqual(module["source_changed"], ["Packages/Wallet/Sources/Wallet/Labels.swift"])
+        self.assertEqual(module["targets"], {})
+        self.assertFalse(module["widened"])
+
+    def test_unknown_base_is_incomplete_not_empty(self):
+        with self.assertRaises(gate.IncompleteError):
+            self.plan(base="no-such-branch")
 
 
 if __name__ == "__main__":
