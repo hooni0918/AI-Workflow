@@ -408,8 +408,9 @@ def _code_part(line):
     return line.split("//", 1)[0]
 
 
-def judge(repo, plan, mutants, module_mutant_counts, decisions):
+def judge(repo, plan, mutants, module_mutant_counts, decisions, skip_modules=()):
     # 계획된 범위와 변이 결과를 test-quality.md 「상태별 판정」으로 판정한다.
+    # skip_modules: 결과 자체가 없어 호출자가 이미 미완료 사유를 남긴 모듈 (사유를 겹쳐 쓰지 않는다).
     by_key = {d["key"]: d for d in decisions}
     used_keys = set()
     cache = {}
@@ -424,6 +425,8 @@ def judge(repo, plan, mutants, module_mutant_counts, decisions):
         if not entry["targets"]:
             continue
         any_target = True
+        if name in skip_modules:
+            continue
         if module_mutant_counts.get(name, 0) == 0:
             result["incomplete_reasons"].append(
                 f"모듈 {name}: 도구가 변이를 하나도 만들지 않았습니다 — 분석했다는 근거가 없습니다")
@@ -594,19 +597,25 @@ def judge_reports(repo, config_path, config, plan, reports, module_errors=None):
     module_errors = module_errors or {}
     decisions, invalid = load_decisions(os.path.join(repo, config["decisions"]))
     known = known_logic_files(repo, config)
-    mutants, counts, extra = [], {}, []
+    mutants, counts, extra, missing = [], {}, [], []
     for module in config["modules"]:
         name = module["name"]
         if not plan["modules"][name]["targets"]:
             continue
         if name not in reports:
             extra.append(module_errors.get(name, f"모듈 {name}: 변이 결과가 없습니다"))
-            counts[name] = 0
+            missing.append(name)
             continue
-        loaded, _ = load_report(reports[name], repo, [os.path.join(repo, module["path"])], known)
+        try:
+            loaded, _ = load_report(reports[name], repo, [os.path.join(repo, module["path"])], known)
+        except IncompleteError as error:
+            # 한 모듈의 결과가 깨져도 결과 파일은 남긴다 — CI 산출물로 사유를 볼 수 있어야 한다
+            extra.append(f"모듈 {name}: {error}")
+            missing.append(name)
+            continue
         mutants.extend(loaded)
         counts[name] = len(loaded)
-    judged = judge(repo, plan, mutants, counts, decisions)
+    judged = judge(repo, plan, mutants, counts, decisions, skip_modules=missing)
     judged["invalid_decisions"] = len(invalid)
     if extra:
         judged["incomplete_reasons"] = extra + judged["incomplete_reasons"]

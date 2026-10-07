@@ -570,8 +570,22 @@ class RunTests(unittest.TestCase):
         self.assertEqual(code, gate.EXIT_INCOMPLETE)
 
     def test_tool_crash_is_incomplete(self):
-        code, _ = self.run_gate("crash")
+        code, result = self.run_gate("crash")
         self.assertEqual(code, gate.EXIT_INCOMPLETE)
+        self.assertEqual(len(result["incomplete_reasons"]), 1)  # 같은 실패를 두 번 적지 않는다
+
+    def test_malformed_report_still_writes_result(self):
+        config = base_config()
+        broken = os.path.join(self.outside.name, "broken.json")
+        with open(broken, "w", encoding="utf-8") as handle:
+            handle.write("{not json")
+        config_path = os.path.join(self.outside.name, "config.json")
+        write_json(config_path, config)
+        code = gate.main(["judge", "--config", config_path, "--repo", self.repo.path,
+                          "--report", f"Wallet={broken}", "--out", self.result_path])
+        self.assertEqual(code, gate.EXIT_INCOMPLETE)
+        with open(self.result_path, encoding="utf-8") as handle:
+            self.assertEqual(json.load(handle)["verdict"], "incomplete")
 
     def test_tool_without_report_is_incomplete_even_with_old_report(self):
         self.run_gate("Killed")  # 이전 실행이 결과를 남긴다
