@@ -16,6 +16,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 
 RUNNER_VERSION = "0.1.0"
 
@@ -588,8 +589,9 @@ def known_logic_files(repo, config):
     return files
 
 
-def judge_reports(repo, config_path, config, plan, reports):
+def judge_reports(repo, config_path, config, plan, reports, module_errors=None):
     # reports: {모듈 이름: 결과 파일 경로}. 범위가 있는 모듈의 결과가 없으면 미완료다.
+    module_errors = module_errors or {}
     decisions, invalid = load_decisions(os.path.join(repo, config["decisions"]))
     known = known_logic_files(repo, config)
     mutants, counts, extra = [], {}, []
@@ -598,7 +600,7 @@ def judge_reports(repo, config_path, config, plan, reports):
         if not plan["modules"][name]["targets"]:
             continue
         if name not in reports:
-            extra.append(f"모듈 {name}: 변이 결과가 없습니다")
+            extra.append(module_errors.get(name, f"모듈 {name}: 변이 결과가 없습니다"))
             counts[name] = 0
             continue
         loaded, _ = load_report(reports[name], repo, [os.path.join(repo, module["path"])], known)
@@ -610,6 +612,61 @@ def judge_reports(repo, config_path, config, plan, reports):
         judged["incomplete_reasons"] = extra + judged["incomplete_reasons"]
         judged["verdict"] = "incomplete"
     return build_result(config, plan, judged, fingerprint(repo, config_path, config, plan))
+
+
+def _run_logged(argv, cwd, timeout, log_path):
+    # 명령을 돌리고 출력 전체를 로그로 남긴다. 실행 불가·시간 초과는 판정 근거가 없으므로 미완료.
+    try:
+        proc = subprocess.run(argv, cwd=cwd, capture_output=True, text=True, timeout=timeout)
+    except FileNotFoundError:
+        raise IncompleteError(f"명령을 찾을 수 없습니다: {argv[0]}")
+    except subprocess.TimeoutExpired:
+        raise IncompleteError(f"{timeout}초 안에 끝나지 않았습니다: {' '.join(argv)}")
+    with open(log_path, "w", encoding="utf-8") as handle:
+        handle.write(f"$ {' '.join(argv)}\n(cwd {cwd}, exit {proc.returncode})\n\n")
+        handle.write(proc.stdout or "")
+        handle.write(proc.stderr or "")
+    return proc.returncode
+
+
+def run_gate(repo, config_path, config, base, work_dir, overrides):
+    # 범위 계산 → 모듈별 기준 테스트 → 변이 도구 → 판정. 모듈 하나의 실패가 다른 모듈 결과를
+    # 가리지 않도록 실패는 사유로 모아 두고, 판정 단계에서 미완료로 합친다.
+    plan = plan_scope(repo, config, base)
+    tool = config["tool"]
+    reports, errors = {}, {}
+    for module in config["modules"]:
+        name = module["name"]
+        if not plan["modules"][name]["targets"]:
+            continue
+        module_path = os.path.join(repo, module["path"])
+        report = os.path.join(work_dir, f"{name}.stryker.json")
+        values = dict(module["vars"])
+        values.update(overrides)
+        values.update({"repo": repo, "module_path": module_path, "report": report,
+                       "sources_path": os.path.join(repo, module["sources"][0])})
+        try:
+            baseline = [expand(part, values) for part in module["baseline"]]
+            command = [expand(part, values) for part in tool["command"]]
+            code = _run_logged(baseline, module_path, tool["timeout_seconds"],
+                               os.path.join(work_dir, f"{name}.baseline.log"))
+            if code != 0:
+                errors[name] = f"모듈 {name}: 변이 전 기준 테스트가 실패했습니다 (exit {code})"
+                continue
+            if os.path.exists(report):
+                os.remove(report)  # 이전 실행의 결과를 이번 결과로 읽지 않는다
+            code = _run_logged(command, module_path, tool["timeout_seconds"],
+                               os.path.join(work_dir, f"{name}.tool.log"))
+            if code != 0:
+                errors[name] = f"모듈 {name}: 변이 도구가 실패했습니다 (exit {code})"
+                continue
+            if not os.path.exists(report):
+                errors[name] = f"모듈 {name}: 변이 도구가 결과 파일을 만들지 않았습니다"
+                continue
+            reports[name] = report
+        except IncompleteError as error:
+            errors[name] = f"모듈 {name}: {error}"
+    return judge_reports(repo, config_path, config, plan, reports, errors)
 
 
 def verify(repo, config_path, config, result_path, base=None):
@@ -657,6 +714,14 @@ def main(argv=None):
     judge_parser.add_argument("--base")
     judge_parser.add_argument("--report", action="append", metavar="모듈=경로")
     judge_parser.add_argument("--out", required=True)
+    run_parser = sub.add_parser("run", help="기준 테스트 → 변이 도구 → 판정을 돌리고 결과 파일을 쓴다")
+    run_parser.add_argument("--config", required=True)
+    run_parser.add_argument("--repo", default=".")
+    run_parser.add_argument("--base")
+    run_parser.add_argument("--out", required=True)
+    run_parser.add_argument("--work-dir", help="도구 결과·로그를 둘 폴더 (기본: 임시 폴더)")
+    run_parser.add_argument("--var", action="append", metavar="이름=값",
+                            help="모듈 vars 덮어쓰기 (예: destination=platform=iOS Simulator,id=...)")
     verify_parser = sub.add_parser("verify", help="저장된 결과가 지금 코드에 대해 유효한 통과인지 확인한다")
     verify_parser.add_argument("--config", required=True)
     verify_parser.add_argument("--repo", default=".")
@@ -682,6 +747,23 @@ def main(argv=None):
                                    _parse_reports(args.report))
             write_result(args.out, result)
             print_result(result)
+            return VERDICT_EXIT[result["verdict"]]
+        if args.command == "run":
+            repo = os.path.abspath(args.repo)
+            config = load_config(args.config)
+            overrides = {}
+            for value in args.var or []:
+                name, sep, val = value.partition("=")
+                if not sep or not name:
+                    raise ConfigError(f"--var 는 이름=값 형식이어야 합니다: {value}")
+                overrides[name] = val
+            work_dir = os.path.abspath(args.work_dir) if args.work_dir else tempfile.mkdtemp(prefix="test-quality-")
+            os.makedirs(work_dir, exist_ok=True)
+            result = run_gate(repo, os.path.abspath(args.config), config, args.base, work_dir, overrides)
+            result["work_dir"] = work_dir
+            write_result(args.out, result)
+            print_result(result)
+            print(f"  도구 결과·로그: {work_dir}")
             return VERDICT_EXIT[result["verdict"]]
         if args.command == "verify":
             repo = os.path.abspath(args.repo)

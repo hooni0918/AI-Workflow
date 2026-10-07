@@ -507,5 +507,82 @@ class ResultAndVerifyTests(unittest.TestCase):
             self.assertIn("변이 결과가 없습니다", handle.read())
 
 
+FAKE_TOOL = r'''
+import json, sys, time
+report, mode = sys.argv[1], sys.argv[2]
+if mode == "sleep":
+    time.sleep(5)
+if mode == "crash":
+    sys.exit(4)
+if mode == "silent":
+    sys.exit(0)
+mutant = {"id": "1", "mutatorName": "RelationalOperatorReplacement", "replacement": "<", "status": mode,
+          "location": {"start": {"line": 5, "column": 19}, "end": {"line": 5, "column": 20}}}
+with open(report, "w") as handle:
+    json.dump({"schemaVersion": "1", "thresholds": {}, "files": {
+        "Sources/Wallet/Wallet.swift": {"language": "swift", "source": "", "mutants": [mutant]}}}, handle)
+'''
+
+
+class RunTests(unittest.TestCase):
+    def setUp(self):
+        self.repo = GitRepo(BASE_FILES)
+        self.outside = tempfile.TemporaryDirectory()
+        self.fake = os.path.join(self.outside.name, "fake_tool.py")
+        with open(self.fake, "w", encoding="utf-8") as handle:
+            handle.write(FAKE_TOOL)
+        self.repo.write(WALLET_PATH, WALLET.replace("amount > 0", "amount >= 1"))
+        self.repo.commit("change")
+        self.result_path = os.path.join(self.outside.name, "result.json")
+        self.work_dir = os.path.join(self.outside.name, "work")
+
+    def tearDown(self):
+        self.repo.cleanup()
+        self.outside.cleanup()
+
+    def run_gate(self, mode, baseline=("true",), timeout=60):
+        config = base_config()
+        config["tool"]["command"] = [sys.executable, self.fake, "{report}", mode]
+        config["tool"]["timeout_seconds"] = timeout
+        config["modules"][0]["baseline"] = list(baseline)
+        config_path = os.path.join(self.outside.name, "config.json")
+        write_json(config_path, config)
+        code = gate.main(["run", "--config", config_path, "--repo", self.repo.path,
+                          "--out", self.result_path, "--work-dir", self.work_dir])
+        with open(self.result_path, encoding="utf-8") as handle:
+            return code, json.load(handle)
+
+    def test_killed_passes(self):
+        code, result = self.run_gate("Killed")
+        self.assertEqual((code, result["verdict"]), (gate.EXIT_PASS, "pass"))
+
+    def test_survived_fails(self):
+        code, result = self.run_gate("Survived")
+        self.assertEqual((code, result["verdict"]), (gate.EXIT_UNRESOLVED, "fail"))
+
+    def test_failing_baseline_is_incomplete(self):
+        code, result = self.run_gate("Killed", baseline=("false",))
+        self.assertEqual(code, gate.EXIT_INCOMPLETE)
+        self.assertIn("기준 테스트", result["incomplete_reasons"][0])
+
+    def test_missing_tool_is_incomplete(self):
+        code, result = self.run_gate("Killed", baseline=("no-such-command-xyz",))
+        self.assertEqual(code, gate.EXIT_INCOMPLETE)
+
+    def test_tool_crash_is_incomplete(self):
+        code, _ = self.run_gate("crash")
+        self.assertEqual(code, gate.EXIT_INCOMPLETE)
+
+    def test_tool_without_report_is_incomplete_even_with_old_report(self):
+        self.run_gate("Killed")  # 이전 실행이 결과를 남긴다
+        code, result = self.run_gate("silent")
+        self.assertEqual(code, gate.EXIT_INCOMPLETE)
+        self.assertIn("결과 파일을 만들지 않았습니다", result["incomplete_reasons"][0])
+
+    def test_tool_timeout_is_incomplete(self):
+        code, _ = self.run_gate("sleep", timeout=1)
+        self.assertEqual(code, gate.EXIT_INCOMPLETE)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)
