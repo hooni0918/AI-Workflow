@@ -36,7 +36,7 @@ Swift는 [swift-mutation-testing](https://github.com/ericodx/swift-mutation-test
 
 ### 워크플로우 구현 단계
 
-ios-workflow의 구현 단계가 끝날 때 바뀐 로직에 검사를 돌리고, 최종 점검에서 결과가 마지막 코드와 맞는지 다시 확인합니다.
+작업 워크플로우의 구현 단계가 끝날 때 바뀐 로직에 검사를 돌리고, 최종 점검에서 결과가 마지막 코드와 맞는지 다시 확인합니다.
 
 ### 앱 CI
 
