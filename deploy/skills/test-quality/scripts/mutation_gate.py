@@ -245,6 +245,89 @@ def plan_scope(repo, config, base=None):
     return plan
 
 
+STRYKER_STATUSES = {
+    "Killed", "Survived", "NoCoverage", "Timeout", "RuntimeError", "CompileError", "Ignored", "Pending",
+}
+
+
+def _components(path):
+    return [part for part in path.replace("\\", "/").split("/") if part and part != "."]
+
+
+def resolve_report_path(key, repo, roots, known_files):
+    # 보고서의 파일 키를 저장소 기준 상대 경로로 바꾼다. 도구마다 절대 경로·프로젝트 기준·잘린
+    # 경로(심볼릭 링크 경로 길이 차로 앞이 잘리는 도구 버그 실측)가 섞여 있어, 실제 파일 목록과
+    # 경로 끝부분이 가장 길게 일치하는 것을 고른다. 동률이면 판정하지 않는다(None).
+    real_repo = os.path.realpath(repo)
+    candidates = []
+    if os.path.isabs(key):
+        candidates.append(os.path.realpath(key))
+    for root in roots:
+        if root:
+            candidates.append(os.path.realpath(os.path.join(root, key)))
+    for candidate in candidates:
+        rel = os.path.relpath(candidate, real_repo).replace(os.sep, "/")
+        if rel in known_files:
+            return rel
+
+    key_parts = _components(key)
+    best, best_len, tie = None, 0, False
+    for rel in known_files:
+        rel_parts = _components(rel)
+        common = 0
+        while (common < len(key_parts) and common < len(rel_parts)
+               and key_parts[-1 - common] == rel_parts[-1 - common]):
+            common += 1
+        if common > best_len:
+            best, best_len, tie = rel, common, False
+        elif common == best_len and common > 0:
+            tie = True
+    if best is None or tie:
+        return None
+    return best
+
+
+def load_report(path, repo, roots, known_files):
+    # Stryker 보고서(mutation-testing-report-schema) → 변이 목록. 읽을 수 없거나 형식이 다르면
+    # 판정 근거가 없으므로 미완료다.
+    try:
+        with open(path, encoding="utf-8") as handle:
+            data = json.load(handle)
+    except FileNotFoundError:
+        raise IncompleteError(f"결과 파일이 없습니다: {path}")
+    except (OSError, json.JSONDecodeError) as error:
+        raise IncompleteError(f"결과 파일을 읽을 수 없습니다: {path} ({error})")
+    files = data.get("files") if isinstance(data, dict) else None
+    if not isinstance(files, dict):
+        raise IncompleteError(f"결과 형식 불일치(files 없음): {path}")
+
+    mutants, unresolved_keys = [], []
+    for key, entry in files.items():
+        rel = resolve_report_path(key, repo, roots + [data.get("projectRoot")], known_files)
+        if rel is None:
+            unresolved_keys.append(key)
+            continue
+        for raw in entry.get("mutants", []) if isinstance(entry, dict) else []:
+            status = raw.get("status")
+            if status not in STRYKER_STATUSES:
+                raise IncompleteError(f"알 수 없는 변이 상태 {status!r}: {path}")
+            try:
+                start = raw["location"]["start"]
+                end = raw["location"]["end"]
+                mutants.append({
+                    "file": rel,
+                    "start_line": int(start["line"]),
+                    "start_column": int(start["column"]),
+                    "end_line": int(end["line"]),
+                    "mutator": str(raw["mutatorName"]),
+                    "replacement": str(raw.get("replacement", "")),
+                    "status": status,
+                })
+            except (KeyError, TypeError, ValueError):
+                raise IncompleteError(f"변이 항목 형식 불일치: {path}")
+    return mutants, unresolved_keys
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="변이 검사 게이트")
     parser.add_argument("--version", action="version", version=RUNNER_VERSION)

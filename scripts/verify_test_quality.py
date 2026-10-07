@@ -255,5 +255,69 @@ class PlanScopeTests(unittest.TestCase):
             self.plan(base="no-such-branch")
 
 
+def stryker_report(file_key, mutants, project_root=None):
+    report = {"schemaVersion": "1", "thresholds": {"high": 80, "low": 60}, "files": {
+        file_key: {"language": "swift", "source": "", "mutants": [
+            {"id": str(i), "mutatorName": m[1], "replacement": m[2], "status": m[3],
+             "location": {"start": {"line": m[0], "column": m[4] if len(m) > 4 else 5},
+                          "end": {"line": m[0], "column": 30}}}
+            for i, m in enumerate(mutants)
+        ]}}}
+    if project_root:
+        report["projectRoot"] = project_root
+    return report
+
+
+class ReportTests(unittest.TestCase):
+    KNOWN = ["Packages/Wallet/Sources/Wallet/Wallet.swift", "Packages/Wallet/Sources/Wallet/Labels.swift"]
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.repo = self.tmp.name
+        for rel in self.KNOWN:
+            os.makedirs(os.path.dirname(os.path.join(self.repo, rel)), exist_ok=True)
+            open(os.path.join(self.repo, rel), "w").close()
+        self.module_root = os.path.join(self.repo, "Packages/Wallet")
+        self.report = os.path.join(self.repo, "report.json")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def load(self, key, mutants, project_root=None):
+        write_json(self.report, stryker_report(key, mutants, project_root))
+        return gate.load_report(self.report, self.repo, [self.module_root], self.KNOWN)
+
+    def test_relative_to_module_root(self):
+        mutants, unresolved = self.load("Sources/Wallet/Wallet.swift", [(5, "ROR", ">", "Survived")])
+        self.assertEqual(mutants[0]["file"], "Packages/Wallet/Sources/Wallet/Wallet.swift")
+        self.assertEqual(unresolved, [])
+
+    def test_absolute_key(self):
+        key = os.path.join(self.repo, "Packages/Wallet/Sources/Wallet/Labels.swift")
+        mutants, _ = self.load(key, [(1, "ROR", ">", "Killed")])
+        self.assertEqual(mutants[0]["file"], "Packages/Wallet/Sources/Wallet/Labels.swift")
+
+    def test_truncated_key_from_symlinked_root_is_matched_by_suffix(self):
+        # 실측: projectRoot 가 /tmp/..., 실제 경로가 /private/tmp/... 이면 키 앞부분이 잘린다
+        mutants, _ = self.load("et/Sources/Wallet/Wallet.swift", [(5, "ROR", ">", "Killed")])
+        self.assertEqual(mutants[0]["file"], "Packages/Wallet/Sources/Wallet/Wallet.swift")
+
+    def test_unknown_key_is_reported_not_guessed(self):
+        mutants, unresolved = self.load("Elsewhere/Other.swift", [(1, "ROR", ">", "Killed")])
+        self.assertEqual(mutants, [])
+        self.assertEqual(unresolved, ["Elsewhere/Other.swift"])
+
+    def test_unknown_status_is_incomplete(self):
+        with self.assertRaises(gate.IncompleteError):
+            self.load("Sources/Wallet/Wallet.swift", [(5, "ROR", ">", "Maybe")])
+
+    def test_missing_or_malformed_report_is_incomplete(self):
+        with self.assertRaises(gate.IncompleteError):
+            gate.load_report(os.path.join(self.repo, "none.json"), self.repo, [], self.KNOWN)
+        write_json(self.report, {"schemaVersion": "1"})
+        with self.assertRaises(gate.IncompleteError):
+            gate.load_report(self.report, self.repo, [], self.KNOWN)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)
