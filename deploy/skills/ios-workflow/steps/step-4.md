@@ -123,6 +123,7 @@ Lead (메인 세션) — 리뷰 결과 종합 + 사용자 보고
 - **코드-narrative 오배치 검출**: 모든 md에 코드로 표현 가능한 내용(deps·설정·테스트 TODO·시그니처)이 산문으로 들어가 있지 않은지. 있으면 stub 코드로 옮기도록 지적.
 - **설계 타당성 역추적**: decisions.md 기술 결정·overview.md 의도를 기준으로 파생 산출물이 충실히 반영하는지.
 - **산출물 간 정합성**: stub View의 props 타입을 ViewModel stub이 일관 소비하는지. 모든 테스트 TODO가 implementation.md의 어느 커밋에서 다뤄지는지 대조. 테스트는 구현 커밋에 함께 포함.
+- **테스트 의도 ↔ 원본 요구사항 대조**: 테스트 TODO 목록을 `background/persistent/`의 원본 자료와 대조해 빠진 실패·경계 상황, 근거 없는 기대값, 요구사항에 답이 없는데 정해 버린 기대값을 찾는다. 기준은 [testing-strategy/test-quality.md](../../../contexts/testing-strategy/test-quality.md) 「테스트 의도」.
 - **자유 리뷰**.
 
 ### 2. 종료 게이트 (테스트 TODO 매칭)
