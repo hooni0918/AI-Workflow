@@ -14,7 +14,7 @@ GIT_HOOKS_DIR := $(shell git rev-parse --git-path hooks 2>/dev/null)
 .PHONY: sync-system unsync-system \
         sync-local-system unsync-local-system \
         sync-local-skills unsync-local-skills \
-        verify-hooks verify-settings verify-local-system \
+        verify-hooks verify-settings verify-local-system verify-test-quality \
         install-hooks uninstall-hooks
 
 # --- system (package.json: sync:system / unsync:system) ---
@@ -47,6 +47,10 @@ verify-settings:
 
 verify-local-system:
 	$(PYTHON) $(SCRIPTS)/verify_local_system.py
+
+# test-quality 스킬의 변이 검사 게이트 회귀 검증
+verify-test-quality:
+	$(PYTHON) $(SCRIPTS)/verify_test_quality.py
 
 # --- git commit-msg hook 연결 (원본 husky prepare 대체) ---
 # .git/hooks/commit-msg 에 scripts/commit_msg.py 를 호출하는 shim을 설치한다.
