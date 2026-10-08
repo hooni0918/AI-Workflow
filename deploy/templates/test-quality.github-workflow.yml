@@ -1,0 +1,83 @@
+# 앱 저장소의 .github/workflows/test-quality.yml 로 복사해 쓴다. (가정) 아직 실제 CI 에서 돌려 보지 않은 템플릿이다.
+#
+# 로컬 워크플로와 같은 변이 검사 게이트(mutation_gate.py)를 CI 에서 돌린다. 스킬 문구만으로는 검사를
+# 건너뛰는 것을 막을 수 없어서다. CI 에서 도는 것과 머지를 막는 것은 별개다 — 브랜치 보호에서 이 잡
+# (test-quality)을 필수 상태 검사로 지정해야 실패·미완료가 머지를 막는다.
+#
+# 채워야 할 값: AI_WORKFLOW_REF(게이트를 받을 AI-Workflow 커밋 SHA), runs-on(앱이 쓰는 Xcode 가 있는 이미지).
+# 게이트 종료 코드: 0 통과·해당 없음 / 1 미해결 / 2 미완료 / 3 설정 오류 — 0 이 아니면 잡이 실패한다.
+name: test-quality
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test-quality:
+    runs-on: macos-latest
+    timeout-minutes: 240
+    env:
+      AI_WORKFLOW_REF: "<AI-Workflow 커밋 SHA>"  # 브랜치 이름이 아니라 SHA 로 고정한다
+      SMT_VERSION: "v1.5.1"                      # .test-quality/config.json 의 tool.version 과 맞춘다
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 기준 브랜치와의 merge-base 를 계산하려면 이력이 필요하다
+
+      - name: 게이트 받기
+        run: |
+          mkdir -p "$RUNNER_TEMP/gate"
+          curl -fsSL -o "$RUNNER_TEMP/gate/mutation_gate.py" \
+            "https://raw.githubusercontent.com/hooni0918/AI-Workflow/${AI_WORKFLOW_REF}/deploy/skills/test-quality/scripts/mutation_gate.py"
+
+      - name: 변이 도구 캐시
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/test-quality-tool
+          key: swift-mutation-testing-${{ env.SMT_VERSION }}-${{ runner.os }}
+
+      - name: 변이 도구 빌드 (고정 태그)
+        run: |
+          BIN=~/.cache/test-quality-tool
+          if [ ! -x "$BIN/swift-mutation-testing" ]; then
+            git clone --depth 1 --branch "$SMT_VERSION" https://github.com/ericodx/swift-mutation-testing.git "$RUNNER_TEMP/smt"
+            swift build -c release --package-path "$RUNNER_TEMP/smt"
+            mkdir -p "$BIN"
+            cp "$(swift build -c release --package-path "$RUNNER_TEMP/smt" --show-bin-path)/swift-mutation-testing" "$BIN/"
+          fi
+          echo "$BIN" >> "$GITHUB_PATH"
+
+      - name: 시뮬레이터 지정
+        run: |
+          UDID=$(python3 - <<'PY'
+          import json, subprocess
+          data = json.loads(subprocess.check_output(["xcrun", "simctl", "list", "devices", "available", "-j"]))
+          for runtime, devices in sorted(data["devices"].items(), reverse=True):
+              if ".iOS-" not in runtime:
+                  continue
+              for device in devices:
+                  if device["name"].startswith("iPhone"):
+                      print(device["udid"])
+                      raise SystemExit
+          raise SystemExit("사용 가능한 iPhone 시뮬레이터가 없습니다")
+          PY
+          )
+          echo "TQ_DESTINATION=platform=iOS Simulator,id=$UDID" >> "$GITHUB_ENV"
+
+      - name: 변이 검사
+        run: |
+          python3 "$RUNNER_TEMP/gate/mutation_gate.py" run \
+            --config .test-quality/config.json \
+            --base "origin/${{ github.base_ref }}" \
+            --out "$RUNNER_TEMP/test-quality/result.json" \
+            --work-dir "$RUNNER_TEMP/test-quality/work"
+
+      - name: 결과 보관
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-quality
+          path: ${{ runner.temp }}/test-quality
+          if-no-files-found: warn
