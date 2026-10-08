@@ -16,7 +16,7 @@ argument-hint: "[run | verify]"
 
 - 프로젝트 프로필 `.claude/docs/project-profile.md` 「테스트 품질 검사」 슬롯에서 설정 파일 경로와 필수 여부를 읽는다. 슬롯이 없거나 `(미채택)`이면 "변이 검사 미채택"을 보고하고 끝낸다 — 통과로 보고하지 않는다
 - 설정 파일 형식은 [config.example.json](config.example.json)을 따른다. 도구 명령·기준 테스트 명령·모듈 경로는 앱 프로젝트가 소유한다
-- 도구는 설정의 `tool.version` 그대로 설치돼 있어야 한다. 없으면 미완료다 — 다른 버전으로 대신 돌리지 않는다
+- 도구는 설정의 `tool.version` 그대로 설치돼 있어야 한다. 없거나 버전이 다르면 미완료다 — 다른 버전으로 대신 돌리지 않는다. swift-mutation-testing은 릴리스 바이너리로 설치한다(소스 빌드는 버전이 `0.0.0-dev`로 찍혀 버전 대조에서 미완료가 된다)
 
 ## 절차
 
@@ -39,6 +39,7 @@ argument-hint: "[run | verify]"
 - 형식: `{"version": 1, "decisions": [{"key", "kind", "reason", "approved_by"}]}`. `key`는 실행 출력의 `key=` 값이다
 - `kind`와 해소할 수 있는 상태: `equivalent`(Survived·NoCoverage), `hang_detected`(Timeout), `crash_detected`(RuntimeError), `ignore_approved`(Ignored)
 - 근거나 승인자가 빈 기록은 해소로 치지 않는다
+- 판단 기록·검사 설정·결과 파일을 고치려 하면 보호 훅이 사용자 허락을 받는다. 허락 창은 사용자가 근거·승인자·범위를 확인하는 자리다
 
 ## 보고
 
