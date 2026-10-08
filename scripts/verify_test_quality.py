@@ -438,6 +438,27 @@ class JudgeTests(unittest.TestCase):
         result = gate.judge(self.repo, one_module_plan({}), [], {}, [])
         self.assertEqual(result["verdict"], "not_applicable")
 
+    def test_suppression_marker_is_unresolved_until_approved(self):
+        path = os.path.join(self.repo, WALLET_PATH)
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write("@SwiftMutationTestingDisabled\n" + WALLET)
+        plan = one_module_plan({WALLET_PATH: [6]})
+        found = gate.suppression_items(self.repo, plan, ["@SwiftMutationTestingDisabled"])
+        self.assertEqual([(s["start_line"], s["status"]) for s in found], [(1, "Ignored")])
+        result = gate.judge(self.repo, plan, [mutant(6, "Killed")], {"Wallet": 1}, [], suppressions=found)
+        self.assertEqual(result["verdict"], "fail")
+        approval = self.decision(found[0], kind="ignore_approved")
+        result = gate.judge(self.repo, plan, [mutant(6, "Killed")], {"Wallet": 1}, [approval], suppressions=found)
+        self.assertEqual(result["verdict"], "pass")
+
+    def test_suppression_marker_in_comment_is_ignored(self):
+        path = os.path.join(self.repo, WALLET_PATH)
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write("// @SwiftMutationTestingDisabled 는 쓰지 않는다\n" + WALLET)
+        found = gate.suppression_items(self.repo, one_module_plan({WALLET_PATH: [6]}),
+                                       ["@SwiftMutationTestingDisabled"])
+        self.assertEqual(found, [])
+
     def test_decision_without_approver_is_rejected(self):
         tmp = os.path.join(self.repo, "decisions.json")
         m = mutant(5, "Survived")

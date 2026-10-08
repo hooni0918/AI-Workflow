@@ -13,7 +13,8 @@
       "--sources-path", "{sources_path}",
       "--no-cache", "--output", "{report}"
     ],
-    "timeout_seconds": 7200
+    "timeout_seconds": 7200,
+    "suppression_markers": ["@SwiftMutationTestingDisabled"]
   },
   "modules": [
     {
@@ -21,7 +22,7 @@
       "path": "Packages/Domain",
       "sources": ["Packages/Domain/Sources"],
       "tests": ["Packages/Domain/Tests"],
-      "fingerprint": ["Packages/Domain/Package.swift"],
+      "fingerprint": ["Packages/Domain/Package.swift", "Packages/Domain/.swift-mutation-testing.yml"],
       "baseline": ["xcodebuild", "test", "-scheme", "{scheme}", "-destination", "{destination}"],
       "vars": {"scheme": "Domain", "destination": "{env:TQ_DESTINATION}"}
     },
@@ -30,7 +31,7 @@
       "path": "Packages/Networking",
       "sources": ["Packages/Networking/Sources"],
       "tests": ["Packages/Networking/Tests"],
-      "fingerprint": ["Packages/Networking/Package.swift"],
+      "fingerprint": ["Packages/Networking/Package.swift", "Packages/Networking/.swift-mutation-testing.yml"],
       "baseline": ["swift", "test", "--package-path", "{module_path}"],
       "command": [
         "swift-mutation-testing", "{module_path}",

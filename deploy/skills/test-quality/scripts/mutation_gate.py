@@ -101,6 +101,9 @@ def load_config(path):
         _require(tool, key, str, "config.tool")
     _check_command(_require(tool, "command", list, "config.tool"), "config.tool.command")
     tool.setdefault("timeout_seconds", 7200)
+    markers = tool.setdefault("suppression_markers", [])
+    if not isinstance(markers, list) or not all(isinstance(m, str) and m for m in markers):
+        raise ConfigError("config.tool.suppression_markers 는 문자열 목록이어야 합니다")
 
     modules = _require(config, "modules", list, "config")
     if not modules:
@@ -415,7 +418,27 @@ def _code_part(line):
     return line.split("//", 1)[0]
 
 
-def judge(repo, plan, mutants, module_mutant_counts, decisions, skip_modules=()):
+def suppression_items(repo, plan, markers):
+    # 도구의 변이 끄기 표식(예: @SwiftMutationTestingDisabled)은 끈 변이를 보고서에서 아예 뺀다.
+    # 결과만 보면 범위가 조용히 줄어드므로, 대상 파일에서 표식을 직접 찾아 Ignored 로 올린다.
+    # 표식이 바뀐 줄 밖(감싼 함수·타입)에 있어도 안쪽 변경을 끄므로 파일 전체를 본다.
+    items = []
+    if not markers:
+        return items
+    for entry in plan["modules"].values():
+        for path in entry["targets"]:
+            for number, line in enumerate(_read_lines(repo, path), start=1):
+                code = _code_part(line)
+                for marker in markers:
+                    column = code.find(marker)
+                    if column >= 0:
+                        items.append({"file": path, "start_line": number, "start_column": column + 1,
+                                      "end_line": number, "mutator": "Suppression", "original": marker,
+                                      "replacement": "", "status": "Ignored"})
+    return items
+
+
+def judge(repo, plan, mutants, module_mutant_counts, decisions, skip_modules=(), suppressions=()):
     # 계획된 범위와 변이 결과를 test-quality.md 「상태별 판정」으로 판정한다.
     # skip_modules: 결과 자체가 없어 호출자가 이미 미완료 사유를 남긴 모듈 (사유를 겹쳐 쓰지 않는다).
     by_key = {d["key"]: d for d in decisions}
@@ -475,6 +498,16 @@ def judge(repo, plan, mutants, module_mutant_counts, decisions, skip_modules=())
         if in_scope_total and in_scope_total == compile_errors:
             result["incomplete_reasons"].append(
                 f"모듈 {name}: 범위 안 변이가 모두 컴파일 실패라 실제로 검사한 것이 없습니다")
+
+    for suppression in suppressions:
+        key, text = mutant_key(repo, suppression, cache)
+        item = dict(suppression, key=key, line_text=text)
+        decision = by_key.get(key)
+        if decision and decision["kind"] == "ignore_approved":
+            used_keys.add(key)
+            result["resolved"].append(dict(item, decision=decision))
+        else:
+            result["unresolved"].append(dict(item, hint=HINTS["Ignored"]))
 
     result["stale_decisions"] = [d["key"] for d in decisions if d["key"] not in used_keys]
     if result["incomplete_reasons"]:
@@ -626,7 +659,8 @@ def judge_reports(repo, config_path, config, plan, reports, module_errors=None):
             continue
         mutants.extend(loaded)
         counts[name] = len(loaded)
-    judged = judge(repo, plan, mutants, counts, decisions, skip_modules=missing)
+    judged = judge(repo, plan, mutants, counts, decisions, skip_modules=missing,
+                   suppressions=suppression_items(repo, plan, config["tool"]["suppression_markers"]))
     judged["invalid_decisions"] = len(invalid)
     if extra:
         judged["incomplete_reasons"] = extra + judged["incomplete_reasons"]
