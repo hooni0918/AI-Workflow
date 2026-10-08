@@ -92,7 +92,7 @@ def main():
             json.dump(CONFIG, handle, indent=2)
         with open(os.path.join(repo, ".gitignore"), "w", encoding="utf-8") as handle:
             handle.write(".build/\n.swiftpm/\n.test-quality/result.json\n")
-        git(repo, "add", "-A")
+        git(repo, "add", "--", "Packages", ".test-quality/config.json", ".gitignore")
         git(repo, "commit", "-q", "-m", "base")
         git(repo, "checkout", "-q", "-b", "feature")
         copy("Sources/Wallet/Wallet.swift", repo, f"{MODULE}/Sources/Wallet/Wallet.swift")
@@ -101,7 +101,7 @@ def main():
         result_path = os.path.join(repo, ".test-quality", "result.json")
         for stage, expected in STAGES:
             copy(f"stages/{stage}", repo, f"{MODULE}/Tests/WalletTests/{stage}")
-            git(repo, "add", "-A")
+            git(repo, "add", "--", "Packages")
             git(repo, "commit", "-q", "-m", stage)
             code, output = gate(repo, "run", "--config", config, "--repo", repo, "--out", result_path,
                                 "--var", f"smt={tool}", "--work-dir", os.path.join(tmp, "work", stage))
