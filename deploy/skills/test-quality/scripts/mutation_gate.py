@@ -371,7 +371,7 @@ def load_report(path, repo, roots, known_files, status_map=None):
             data = json.load(handle)
     except FileNotFoundError:
         raise IncompleteError(f"결과 파일이 없습니다: {path}")
-    except (OSError, json.JSONDecodeError) as error:
+    except (OSError, ValueError) as error:  # ValueError: JSON·UTF-8 오류
         raise IncompleteError(f"결과 파일을 읽을 수 없습니다: {path} ({error})")
     files = data.get("files") if isinstance(data, dict) else None
     if not isinstance(files, dict):
@@ -383,7 +383,10 @@ def load_report(path, repo, roots, known_files, status_map=None):
         if rel is None:
             unresolved_keys.append(key)
             continue
-        for raw in entry.get("mutants", []) if isinstance(entry, dict) else []:
+        raw_mutants = entry.get("mutants") if isinstance(entry, dict) else None
+        if not isinstance(raw_mutants, list) or not all(isinstance(raw, dict) for raw in raw_mutants):
+            raise IncompleteError(f"결과 형식 불일치({key} 의 mutants): {path}")
+        for raw in raw_mutants:
             status = raw.get("status")
             status = status_map.get(status, status) if isinstance(status, str) else status
             if status not in STRYKER_STATUSES:
@@ -504,9 +507,11 @@ def load_decisions(path):
     try:
         with open(path, encoding="utf-8") as handle:
             data = json.load(handle)
-    except (OSError, json.JSONDecodeError) as error:
+    except (OSError, ValueError) as error:  # ValueError: JSON·UTF-8 오류
         raise IncompleteError(f"판단 기록 파일을 읽을 수 없습니다: {path} ({error})")
-    entries = data.get("decisions", []) if isinstance(data, dict) else []
+    entries = data.get("decisions") if isinstance(data, dict) else None
+    if not isinstance(entries, list):
+        raise IncompleteError(f"판단 기록 형식 불일치({{\"decisions\": [...]}} 가 아님): {path}")
     valid, invalid = [], []
     for entry in entries:
         # file·line_text 는 사람이 무엇을 승인하는지 보이게 하려고 필수로 둔다(해시 키만으로는 알 수 없다)
@@ -790,6 +795,19 @@ def print_result(result, out=sys.stdout):
         print(f"  맞는 변이가 없는 판단 기록: {', '.join(result['stale_decisions'])}", file=out)
 
 
+def incomplete_result(reason, produced_by):
+    # 판정까지 가지 못한 실행도 결과 파일을 남긴다 — CI 산출물에서 사유를 볼 수 있어야 하고,
+    # 이전 실행의 통과 결과가 그 자리에 남아 있으면 안 된다.
+    return {
+        "runner_version": RUNNER_VERSION, "produced_by": produced_by, "verdict": "incomplete",
+        "fingerprint": None,
+        "summary": {"detected": 0, "unresolved": 0, "resolved_by_decision": 0, "compile_errors": 0,
+                    "out_of_scope": 0},
+        "unresolved": [], "resolved": [], "no_mutants": [], "incomplete_reasons": [reason],
+        "invalid_decisions": 0, "stale_decisions": [],
+    }
+
+
 def write_result(path, result):
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     with open(path, "w", encoding="utf-8") as handle:
@@ -858,16 +876,19 @@ def judge_reports(repo, config_path, config, plan, reports, module_errors=None,
 
 def _run_logged(argv, cwd, timeout, log_path):
     # 명령을 돌리고 출력 전체를 로그로 남긴다. 실행 불가·시간 초과는 판정 근거가 없으므로 미완료.
+    # 출력은 바이트로 받아 깨진 글자를 바꿔 적는다 — 도구 로그의 UTF-8 아닌 바이트로 실행기가 멈추면 안 된다.
     try:
-        proc = subprocess.run(argv, cwd=cwd, capture_output=True, text=True, timeout=timeout)
+        proc = subprocess.run(argv, cwd=cwd, capture_output=True, timeout=timeout)
     except FileNotFoundError:
         raise IncompleteError(f"명령을 찾을 수 없습니다: {argv[0]}")
     except subprocess.TimeoutExpired:
         raise IncompleteError(f"{timeout}초 안에 끝나지 않았습니다: {' '.join(argv)}")
+    except OSError as error:  # 폴더·권한 없음 등
+        raise IncompleteError(f"명령을 실행할 수 없습니다: {argv[0]} ({error})")
     with open(log_path, "w", encoding="utf-8") as handle:
         handle.write(f"$ {' '.join(argv)}\n(cwd {cwd}, exit {proc.returncode})\n\n")
-        handle.write(proc.stdout or "")
-        handle.write(proc.stderr or "")
+        handle.write(proc.stdout.decode("utf-8", "replace"))
+        handle.write(proc.stderr.decode("utf-8", "replace"))
     return proc.returncode
 
 
@@ -1042,9 +1063,16 @@ def main(argv=None):
         print(f"설정 오류: {error}", file=sys.stderr)
         return EXIT_USAGE
     except IncompleteError as error:
-        print(f"검사 미완료: {error}", file=sys.stderr)
-        return EXIT_INCOMPLETE
-    return EXIT_USAGE
+        reason = str(error)
+    except Exception as error:  # noqa: BLE001 — 예상 못 한 오류도 통과·미해결과 섞이지 않게 미완료로 끝낸다
+        reason = f"실행기 오류: {type(error).__name__}: {error}"
+    print(f"검사 미완료: {reason}", file=sys.stderr)
+    if getattr(args, "out", None):
+        try:
+            write_result(args.out, incomplete_result(reason, args.command))
+        except OSError as error:
+            print(f"결과 파일도 쓰지 못했습니다: {error}", file=sys.stderr)
+    return EXIT_INCOMPLETE
 
 
 if __name__ == "__main__":

@@ -397,6 +397,15 @@ class ReportTests(unittest.TestCase):
         mutants, _ = self.load("Labels.swift", [(1, "ROR", ">", "Killed")])
         self.assertEqual(mutants[0]["file"], "Packages/Wallet/Sources/Wallet/Labels.swift")
 
+    def test_malformed_mutant_list_is_incomplete(self):
+        write_json(self.report, {"files": {"Sources/Wallet/Wallet.swift": {"mutants": {"0": {}}}}})
+        with self.assertRaises(gate.IncompleteError):
+            gate.load_report(self.report, self.repo, [self.module_root], self.KNOWN)
+        with open(self.report, "wb") as handle:
+            handle.write(b'{"files": "\xff"}')
+        with self.assertRaises(gate.IncompleteError):
+            gate.load_report(self.report, self.repo, [self.module_root], self.KNOWN)
+
     def test_tool_specific_statuses_are_mapped(self):
         # swift-mutation-testing 1.5.1 소스: unviable → "Unviable", killedByCrash → "Crash"
         write_json(self.report, stryker_report("Sources/Wallet/Wallet.swift",
@@ -640,6 +649,13 @@ class JudgeTests(unittest.TestCase):
         m = mutant(5, "Survived")
         result = self.judge({WALLET_PATH: [5]}, [m], [self.decision(m, line_text="다른 줄")])
         self.assertEqual(result["verdict"], "fail")
+
+    def test_malformed_decisions_file_is_incomplete(self):
+        tmp = os.path.join(self.repo, "decisions.json")
+        for content in ({"decisions": {"key": "x"}}, {"version": 1}, [1]):
+            write_json(tmp, content)
+            with self.assertRaises(gate.IncompleteError):
+                gate.load_decisions(tmp)
 
     def test_decision_without_approver_is_rejected(self):
         tmp = os.path.join(self.repo, "decisions.json")
@@ -923,6 +939,24 @@ class RunTests(unittest.TestCase):
         # 소스 빌드는 0.0.0-dev 를, 상위 버전은 1.5.10 을 찍는다 — 둘 다 1.5.1 이 아니다
         self.assertEqual(self.run_with_version("0.0.0-dev"), gate.EXIT_INCOMPLETE)
         self.assertEqual(self.run_with_version("1.5.10"), gate.EXIT_INCOMPLETE)
+
+    def test_unrunnable_command_is_incomplete_not_a_crash(self):
+        # 실측: 도구 경로에 파일 아래 경로를 주면 NotADirectoryError 로 멈추고 exit 1(미해결과 같음)이었다
+        code, result = self.run_gate("Killed", baseline=(os.path.join(self.fake, "x"),))
+        self.assertEqual((code, result["verdict"]), (gate.EXIT_INCOMPLETE, "incomplete"))
+
+    def test_non_utf8_tool_output_does_not_crash(self):
+        code, _ = self.run_gate("Killed", baseline=(sys.executable, "-c",
+                                                    "import sys; sys.stdout.buffer.write(bytes([255, 254]))"))
+        self.assertEqual(code, gate.EXIT_PASS)
+
+    def test_unexpected_error_still_writes_incomplete_result(self):
+        from unittest import mock
+        write_json(self.result_path, {"verdict": "pass", "produced_by": "run"})  # 이전 실행의 통과 결과
+        with mock.patch.object(gate, "plan_scope", side_effect=RuntimeError("boom")):
+            code, result = self.run_gate("Killed")
+        self.assertEqual((code, result["verdict"]), (gate.EXIT_INCOMPLETE, "incomplete"))
+        self.assertIn("RuntimeError", result["incomplete_reasons"][0])
 
     def test_tool_timeout_is_incomplete(self):
         code, _ = self.run_gate("sleep", timeout=1)
