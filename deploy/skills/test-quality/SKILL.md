@@ -28,7 +28,7 @@ argument-hint: "[run | verify]"
 
 ## 절차
 
-1. 실행한다: 이 스킬 폴더의 `scripts/mutation_gate.py run --config <설정> --out .test-quality/result.json`. 기기·경로처럼 실행 환경마다 다른 값은 `--var 이름=값`으로 넘긴다
+1. 실행한다: `python3 <이 스킬 폴더>/scripts/mutation_gate.py run --config <설정> --out .test-quality/result.json`. 기기·경로처럼 실행 환경마다 다른 값은 `--var 이름=값`으로 넘긴다
 2. 판정을 처리한다
    - **통과·해당 없음**: 보고하고 끝낸다
    - **미해결**: 항목마다 원본 요구사항과 대조한다
@@ -37,7 +37,7 @@ argument-hint: "[run | verify]"
      - 결과가 같은 변이·멈춤·충돌, 변이 대상이 아닌 표기면 판단 기록 초안(`key`·`file`·`line_text`·`kind`·`reason`)을 근거와 함께 사용자에게 제안한다. `approved_by`는 사용자가 채운다
    - **미완료**: 출력의 사유(기준 테스트 실패·도구 미설치·설정 밖 변경 등)를 해소하고 다시 실행한다
 3. 보강·결정이 끝날 때마다 다시 실행한다. 어디까지 반복하는지는 「적용 수준」을 따른다
-4. 그 뒤 코드가 또 바뀌었으면 `scripts/mutation_gate.py verify --config <설정> --result .test-quality/result.json`로 결과가 지금 코드에 유효한지 확인한다. 0이 아니면 1번부터 다시 한다
+4. 그 뒤 코드가 또 바뀌었으면 `python3 <이 스킬 폴더>/scripts/mutation_gate.py verify --config <설정> --result .test-quality/result.json`로 결과가 지금 코드에 유효한지 확인한다. 0이 아니면 1번부터 다시 한다
 
 종료 코드: 0 통과·해당 없음 / 1 미해결 / 2 미완료 / 3 설정 오류. 도구·기준 테스트 출력은 `run`이 알려 주는 작업 폴더에 남는다.
 
