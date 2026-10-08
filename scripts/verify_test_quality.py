@@ -263,6 +263,13 @@ class PlanScopeTests(unittest.TestCase):
         self.assertEqual(targets["Packages/Wallet/Sources/Wallet/Pay Helper.swift"], [1])
         self.assertEqual(targets["Packages/Wallet/Sources/Wallet/새파일.swift"], "all")
 
+    def test_diff_attributes_do_not_hide_changed_lines(self):
+        self.repo.write(".gitattributes", "*.swift -diff\n")
+        self.repo.write(WALLET_PATH, WALLET.replace("balance >= amount", "balance > amount"))
+        self.repo.commit("binary attr")
+        targets = self.plan()["modules"]["Wallet"]["targets"]
+        self.assertEqual(targets, {WALLET_PATH: [5]})
+
     def test_file_moved_in_from_ignored_location_is_fully_targeted(self):
         self.repo.write("App/Fee.swift", "struct Fee {\n    let ok = 1 >= 0\n}\n")
         self.repo.commit("fee in app")

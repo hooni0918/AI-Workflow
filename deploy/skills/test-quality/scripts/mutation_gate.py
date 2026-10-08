@@ -159,7 +159,10 @@ def changed_lines(repo, merge_base, path):
     # 한 파일의 바뀐 줄 번호. 머리줄의 경로는 읽지 않는다 — git 이 한글은 8진수로 인용하고 공백
     # 경로 끝에는 탭을 붙여, 머리줄에서 경로를 잘라 쓰면 변경이 범위에서 빠진다(실측).
     # 줄만 지운 자리(+c,0)는 새 줄이 없으므로 앞뒤 줄을 대상으로 본다.
-    text = git(repo, "diff", "-U0", "--no-color", "--no-renames", merge_base, "--", path)
+    # --text·--no-ext-diff·--no-textconv: .gitattributes 의 -diff/binary·외부 diff 설정이 출력을
+    # "Binary files differ" 로 바꿔 바뀐 줄이 사라지지 않게 한다.
+    text = git(repo, "diff", "-U0", "--no-color", "--no-renames", "--text", "--no-ext-diff",
+               "--no-textconv", merge_base, "--", path)
     lines = set()
     for line in text.splitlines():
         match = _HUNK.match(line)
