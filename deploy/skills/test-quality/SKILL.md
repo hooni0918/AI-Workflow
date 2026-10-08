@@ -35,7 +35,7 @@ argument-hint: "[run | verify]"
 
 ## 판단 기록
 
-- 위치: 설정의 `decisions` 경로 (기본 `.test-quality/decisions.json`, 앱 레포에 커밋)
+- 위치: `.test-quality/decisions.json` (고정, 앱 레포에 커밋)
 - 형식: `{"version": 1, "decisions": [{"key", "file", "line_text", "kind", "reason", "approved_by"}]}`. `key`·`file`·`line_text`는 실행 출력의 미해결 항목에서 옮긴다(`key=` 값, 파일 경로, 그 아래 줄 내용). 셋이 모두 실제 변이와 맞아야 해소된다
 - `kind`와 해소할 수 있는 상태: `equivalent`(Survived·NoCoverage), `hang_detected`(Timeout), `crash_detected`(RuntimeError), `ignore_approved`(Ignored), `no_mutant_expected`(NoMutant — 실행기가 올린 변이 없음)
 - 근거나 승인자가 빈 기록은 해소로 치지 않는다

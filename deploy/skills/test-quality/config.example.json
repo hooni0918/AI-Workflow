@@ -3,7 +3,6 @@
   "base": "origin/main",
   "source_extensions": [".swift"],
   "ignore": ["App/**"],
-  "decisions": ".test-quality/decisions.json",
   "tool": {
     "name": "swift-mutation-testing",
     "version": "1.5.1",
