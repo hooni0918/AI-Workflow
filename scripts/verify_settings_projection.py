@@ -90,6 +90,15 @@ def main():
         "claude: surface-claude-md가 Glob·Grep 매처로 fan-out 등록됨",
     )
 
+    # file_change(on) 항목은 Edit·Write·Bash 모두에 등록돼야 한다 — 하나라도 빠지면 그 경로로 보호 파일을 고칠 수 있다
+    check(
+        all(
+            any(h["matcher"] == m and h["file"] == "check_test_quality_protect.py" for h in claude_pre)
+            for m in ("Edit", "Write", "Bash")
+        ),
+        "claude: test-quality 보호 훅이 Edit·Write·Bash 매처로 fan-out 등록됨",
+    )
+
     # codex: UserPromptSubmit 없음, PreToolUse 전부 단일 '*'
     check(not any(h["event"] == "UserPromptSubmit" for h in codex), "codex: UserPromptSubmit 없음")
     codex_pre = [h for h in codex if h["event"] == "PreToolUse"]

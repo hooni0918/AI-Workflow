@@ -27,6 +27,8 @@ HOOK_ADAPTERS = {
             "message": "SendMessage",
             "enterworktree": "EnterWorktree",
             "search": ["Glob", "Grep"],
+            # 파일을 바꿀 수 있는 도구 전부. "write"(Write 단독)와 달리 Edit·셸 명령까지 본다.
+            "file_change": ["Edit", "Write", "Bash"],
         }.get(on),
     },
     "codex": {

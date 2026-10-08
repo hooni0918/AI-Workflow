@@ -41,6 +41,12 @@
       "event": "PreToolUse",
       "on": "message",
       "msg": "Checking team message policy..."
+    },
+    {
+      "file": "check_test_quality_protect.py",
+      "event": "PreToolUse",
+      "on": "file_change",
+      "msg": "Checking test-quality protected files..."
     }
   ]
 }
