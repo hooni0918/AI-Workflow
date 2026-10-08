@@ -21,6 +21,8 @@ jobs:
     env:
       AI_WORKFLOW_REF: "<AI-Workflow 커밋 SHA>"  # 브랜치 이름이 아니라 SHA 로 고정한다
       SMT_VERSION: "v1.5.1"                      # .test-quality/config.json 의 tool.version 과 맞춘다
+      # 릴리스 tar.gz 의 SHA-256. 버전을 올리면 새 파일을 받아 다시 계산해 바꾼다
+      SMT_SHA256: "ccab00485a2bff3552e39e1fb0add5c3068dbaa6a8e0c7bcc644998b56ccddf3"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -32,22 +34,16 @@ jobs:
           curl -fsSL -o "$RUNNER_TEMP/gate/mutation_gate.py" \
             "https://raw.githubusercontent.com/hooni0918/AI-Workflow/${AI_WORKFLOW_REF}/deploy/skills/test-quality/scripts/mutation_gate.py"
 
-      - name: 변이 도구 캐시
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/test-quality-tool
-          key: swift-mutation-testing-${{ env.SMT_VERSION }}-${{ runner.os }}
-
-      - name: 변이 도구 빌드 (고정 태그)
+      - name: 변이 도구 받기 (고정 릴리스)
+        # 소스 빌드는 버전이 0.0.0-dev 로 찍혀 게이트의 버전 대조를 통과하지 못한다 — 릴리스 바이너리를 쓴다
         run: |
-          BIN=~/.cache/test-quality-tool
-          if [ ! -x "$BIN/swift-mutation-testing" ]; then
-            git clone --depth 1 --branch "$SMT_VERSION" https://github.com/ericodx/swift-mutation-testing.git "$RUNNER_TEMP/smt"
-            swift build -c release --package-path "$RUNNER_TEMP/smt"
-            mkdir -p "$BIN"
-            cp "$(swift build -c release --package-path "$RUNNER_TEMP/smt" --show-bin-path)/swift-mutation-testing" "$BIN/"
-          fi
-          echo "$BIN" >> "$GITHUB_PATH"
+          ASSET="swift-mutation-testing-${SMT_VERSION}-macos.tar.gz"
+          mkdir -p "$RUNNER_TEMP/tool"
+          curl -fsSL -o "$RUNNER_TEMP/$ASSET" \
+            "https://github.com/ericodx/swift-mutation-testing/releases/download/${SMT_VERSION}/${ASSET}"
+          echo "${SMT_SHA256}  $RUNNER_TEMP/$ASSET" | shasum -a 256 -c -
+          tar -xzf "$RUNNER_TEMP/$ASSET" -C "$RUNNER_TEMP/tool"
+          echo "$RUNNER_TEMP/tool" >> "$GITHUB_PATH"
 
       - name: 시뮬레이터 지정
         run: |
