@@ -154,6 +154,12 @@ class ConfigTests(unittest.TestCase):
         with self.assertRaises(gate.ConfigError):
             gate.load_config(self.path)
 
+    def test_tool_config_files_must_be_names(self):
+        for bad in ("x.yml", [""], [1]):
+            write_json(self.path, base_config(tool=dict(base_config()["tool"], config_files=bad)))
+            with self.assertRaises(gate.ConfigError):
+                gate.load_config(self.path)
+
     def test_check_config_exit_codes(self):
         write_json(self.path, base_config())
         self.assertEqual(gate.main(["check-config", "--config", self.path]), gate.EXIT_PASS)
@@ -703,6 +709,48 @@ class ResultAndVerifyTests(unittest.TestCase):
         args = ["judge", "--config", self.config_path, "--repo", self.repo.path, "--out", self.result_path,
                 "--report", f"Wallet={self.report_path}"]
         self.assertNotEqual(gate.main(args), gate.EXIT_PASS)
+
+    def tool_config_judge(self, decisions=None):
+        config = base_config()
+        config["tool"]["config_files"] = [".swift-mutation-testing.yml"]
+        config["ignore"] = ["**/*.yml"]  # 제외 패턴에 걸려도 빠지지 않아야 한다
+        write_json(self.config_path, config)
+        if decisions is not None:
+            write_json(os.path.join(self.repo.path, ".test-quality/decisions.json"), {"decisions": decisions})
+        write_json(self.report_path, stryker_report("Sources/Wallet/Wallet.swift", [(5, "ROR", ">", "Killed")]))
+        code = gate.main(["judge", "--config", self.config_path, "--repo", self.repo.path,
+                          "--out", self.result_path, "--report", f"Wallet={self.report_path}"])
+        with open(self.result_path, encoding="utf-8") as handle:
+            return code, json.load(handle)
+
+    def test_tool_config_change_needs_approval(self):
+        # 실측 시나리오: yml 에 변이 종류 끄기를 넣어도 결과에 흔적이 없어 통과했다
+        self.repo.write("Packages/Wallet/.swift-mutation-testing.yml", "timeout: 60\n")
+        self.repo.commit("yml base")
+        self.repo.git("branch", "-f", "main", "HEAD")
+        self.repo.write(WALLET_PATH, WALLET.replace("amount >= 1", "amount >= 2"))
+        self.repo.write("Packages/Wallet/.swift-mutation-testing.yml",
+                        "timeout: 60\ndisabled-mutators: [RelationalOperatorReplacement]\n")
+        self.repo.commit("narrow")
+        code, result = self.tool_config_judge()
+        self.assertEqual(code, gate.EXIT_UNRESOLVED)
+        item = result["unresolved"][0]
+        self.assertEqual((item["file"], item["start_line"], item["status"]),
+                         ("Packages/Wallet/.swift-mutation-testing.yml", 2, "Ignored"))
+        entry = {"key": item["key"], "file": item["file"], "line_text": item["line_text"],
+                 "kind": "ignore_approved", "reason": "느린 변이 종류를 끈다", "approved_by": "reviewer"}
+        code, _ = self.tool_config_judge([entry])
+        self.assertEqual(code, gate.EXIT_PASS)
+        # 모듈 fingerprint 에 적지 않아도 도구 설정 파일은 결과에 묶인다
+        self.repo.write("Packages/Wallet/.swift-mutation-testing.yml", "timeout: 1\n")
+        self.assertEqual(self.verify_cli(), gate.EXIT_INCOMPLETE)
+
+    def test_tool_config_only_change_is_not_not_applicable(self):
+        self.repo.git("branch", "-f", "main", "HEAD")
+        self.repo.write("Packages/Wallet/.swift-mutation-testing.yml", "disabled-mutators: [X]\n")
+        self.repo.commit("yml only")
+        code, result = self.tool_config_judge()
+        self.assertEqual((code, result["verdict"]), (gate.EXIT_UNRESOLVED, "fail"))
 
     def test_module_in_scope_without_report_is_incomplete(self):
         self.assertEqual(self.judge_cli("Killed", extra_reports=False), gate.EXIT_INCOMPLETE)

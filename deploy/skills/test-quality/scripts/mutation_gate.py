@@ -113,6 +113,9 @@ def load_config(path):
     markers = tool.setdefault("suppression_markers", [])
     if not isinstance(markers, list) or not all(isinstance(m, str) and m for m in markers):
         raise ConfigError("config.tool.suppression_markers 는 문자열 목록이어야 합니다")
+    config_files = tool.setdefault("config_files", [])
+    if not isinstance(config_files, list) or not all(isinstance(f, str) and f for f in config_files):
+        raise ConfigError("config.tool.config_files 는 모듈 폴더 기준 파일 이름 목록이어야 합니다")
 
     modules = _require(config, "modules", list, "config")
     if not modules:
@@ -205,6 +208,12 @@ def _module_logic_files(repo, module, config):
     return sorted(files)
 
 
+def tool_config_paths(module, config):
+    # 모듈별 도구 설정 파일(예: .swift-mutation-testing.yml)의 저장소 기준 경로
+    return [os.path.normpath(os.path.join(module["path"], name)).replace(os.sep, "/")
+            for name in config["tool"]["config_files"]]
+
+
 def plan_scope(repo, config, base=None):
     # 기준 브랜치 대비 바뀐 내용으로 모듈별 검사 범위를 정한다. 작업 트리의 미커밋 변경과
     # 추적 안 된 새 파일도 포함한다 — 커밋 전 로컬 검사에서 새 파일이 빠지면 안 된다.
@@ -219,13 +228,26 @@ def plan_scope(repo, config, base=None):
         changes[path] = None  # None = 파일 전체
 
     modules = {
-        m["name"]: {"targets": {}, "widened": False, "source_changed": [], "test_changed": []}
+        m["name"]: {"targets": {}, "widened": False, "source_changed": [], "test_changed": [],
+                    "tool_config_changed": {}}
         for m in config["modules"]
     }
+    config_owner = {path: m["name"] for m in config["modules"] for path in tool_config_paths(m, config)}
     plan = {"merge_base": merge_base, "changed": sorted(changes), "modules": modules,
             "unmapped": [], "ignored": [], "other": []}
 
     for path in sorted(changes):
+        if path in config_owner:
+            # 도구 설정은 변이 종류·제외 범위를 바꿔 검사를 조용히 줄일 수 있다. 검사 제외 패턴에
+            # 걸려도 빼지 않고 바뀐 줄을 기록해 판정에서 승인을 받게 한다.
+            if not os.path.exists(os.path.join(repo, path)):
+                lines = "deleted"
+            elif changes[path] is None:
+                lines = "all"
+            else:
+                lines = sorted(changed_lines(repo, merge_base, path)) or [1]
+            modules[config_owner[path]]["tool_config_changed"][path] = lines
+            continue
         if _ignored(path, config["ignore"]):
             plan["ignored"].append(path)
             continue
@@ -533,6 +555,29 @@ def suppression_items(repo, plan, markers):
     return items
 
 
+TOOL_CONFIG_HINT = ("도구 설정이 기준 대비 바뀌었다 — 변이 종류 끄기·제외 범위 추가처럼 검사를 줄이는 "
+                    "변경이면 되돌리거나, 승인된 판단 기록(ignore_approved)을 남긴다")
+
+
+def tool_config_items(repo, plan):
+    # 바뀐 도구 설정 줄을 Ignored 로 올린다. 줄마다 따로 올려 승인이 바뀐 줄 하나하나에 묶이게 한다.
+    items = []
+    for entry in plan["modules"].values():
+        for path, lines in entry["tool_config_changed"].items():
+            source = _read_lines(repo, path)
+            if lines == "deleted":
+                numbers = [1]
+            elif lines == "all":
+                numbers = [n for n, line in enumerate(source, start=1) if line.strip()] or [1]
+            else:
+                numbers = lines
+            for number in numbers:
+                items.append({"file": path, "start_line": number, "start_column": 1, "end_line": number,
+                              "mutator": "ToolConfigChange", "original": "", "replacement": "",
+                              "status": "Ignored", "hint": TOOL_CONFIG_HINT})
+    return items
+
+
 def judge(repo, plan, mutants, module_mutant_counts, decisions, skip_modules=(), suppressions=()):
     # 계획된 범위와 변이 결과를 test-quality.md 「상태별 판정」으로 판정한다.
     # skip_modules: 결과 자체가 없어 호출자가 이미 미완료 사유를 남긴 모듈 (사유를 겹쳐 쓰지 않는다).
@@ -592,7 +637,7 @@ def judge(repo, plan, mutants, module_mutant_counts, decisions, skip_modules=(),
 
     for suppression in suppressions:
         key, text = mutant_key(repo, suppression, cache)
-        pending.append(dict(suppression, key=key, line_text=text, hint=HINTS["Ignored"]))
+        pending.append(dict(suppression, key=key, line_text=text, hint=suppression.get("hint", HINTS["Ignored"])))
 
     key_counts = {}
     for item in pending:
@@ -653,9 +698,10 @@ def fingerprint(repo, config_path, config, plan):
     feed("scope", json.dumps({"modules": scope, "unmapped": plan["unmapped"]}, sort_keys=True))
     for module in config["modules"]:
         entry = plan["modules"][module["name"]]
-        if not (entry["targets"] or entry["source_changed"] or entry["test_changed"]):
+        if not (entry["targets"] or entry["source_changed"] or entry["test_changed"]
+                or entry["tool_config_changed"]):
             continue
-        files = set(module["fingerprint"])
+        files = set(module["fingerprint"]) | set(tool_config_paths(module, config))
         for rel_dir in module["sources"] + module["tests"]:
             files.update(_walk_files(repo, rel_dir))
         for rel in sorted(files):
@@ -676,8 +722,9 @@ def build_result(config, plan, judged, fingerprint_value):
         "fingerprint": fingerprint_value,
         "merge_base": plan["merge_base"],
         "scope": {
-            "modules": {name: {"targets": e["targets"], "widened": e["widened"]}
-                        for name, e in plan["modules"].items() if e["targets"]},
+            "modules": {name: {"targets": e["targets"], "widened": e["widened"],
+                               "tool_config_changed": e["tool_config_changed"]}
+                        for name, e in plan["modules"].items() if e["targets"] or e["tool_config_changed"]},
             "unmapped": plan["unmapped"], "ignored": plan["ignored"], "other": plan["other"],
         },
         "summary": {
@@ -714,6 +761,8 @@ def print_result(result, out=sys.stdout):
         # 한 줄에 같은 종류 연산자가 여럿일 수 있어 원래 표기와 열 번호를 함께 보인다
         if item["mutator"] == "NoMutant":
             change = f"{item['original']} 에 변이 없음"
+        elif item["mutator"] == "ToolConfigChange":
+            change = "도구 설정 바뀜"
         else:
             change = f"{item.get('original') or '?'} → {item['replacement'] or '(삭제)'}"
         print(f"  미해결 {item['file']}:{item['start_line']}:{item.get('start_column', '?')} "
@@ -774,7 +823,8 @@ def judge_reports(repo, config_path, config, plan, reports, module_errors=None):
         mutants.extend(loaded)
         counts[name] = len(loaded)
     judged = judge(repo, plan, mutants, counts, decisions, skip_modules=missing,
-                   suppressions=suppression_items(repo, plan, config["tool"]["suppression_markers"]))
+                   suppressions=suppression_items(repo, plan, config["tool"]["suppression_markers"])
+                   + tool_config_items(repo, plan))
     judged["invalid_decisions"] = len(invalid)
     if extra:
         judged["incomplete_reasons"] = extra + judged["incomplete_reasons"]
