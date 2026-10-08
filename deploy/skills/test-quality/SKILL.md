@@ -34,7 +34,7 @@ argument-hint: "[run | verify]"
    - **미해결**: 항목마다 원본 요구사항과 대조한다
      - 테스트 누락·약한 단언이면 테스트를 보강한다. 기대값은 test-quality.md 「테스트 의도」를 따른다
      - 요구사항에 답이 없으면 사용자에게 질문한다(test-quality.md 「요구사항에 답이 없을 때」)
-     - 결과가 같은 변이·멈춤·충돌, 변이 대상이 아닌 표기면 판단 기록 초안(`key`·`file`·`line_text`·`kind`·`reason`)을 근거와 함께 사용자에게 제안한다. `approved_by`는 사용자가 채운다
+     - 결과가 같은 변이·멈춤·충돌, 변이 대상이 아닌 표기면 판단 기록 초안(`key`·`file`·`line_text`·`kind`·`reason`)을 근거와 함께 사용자에게 제안한다
    - **미완료**: 출력의 사유(기준 테스트 실패·도구 미설치·설정 밖 변경 등)를 해소하고 다시 실행한다
 3. 보강·결정이 끝날 때마다 다시 실행한다. 어디까지 반복하는지는 「적용 수준」을 따른다
 4. 그 뒤 코드가 또 바뀌었으면 `python3 <이 스킬 폴더>/scripts/mutation_gate.py verify --config <설정> --result .test-quality/result.json`로 결과가 지금 코드에 유효한지 확인한다. 0이 아니면 1번부터 다시 한다
@@ -47,7 +47,8 @@ argument-hint: "[run | verify]"
 - 형식: `{"version": 1, "decisions": [{"key", "file", "line_text", "kind", "reason", "approved_by"}]}`. `key`·`file`·`line_text`는 실행 출력의 미해결 항목에서 옮긴다(`key=` 값, 파일 경로, 그 아래 줄 내용). 셋이 모두 실제 변이와 맞아야 해소된다
 - `kind`와 해소할 수 있는 상태: `equivalent`(Survived·NoCoverage), `hang_detected`(Timeout), `crash_detected`(RuntimeError), `ignore_approved`(Ignored), `no_mutant_expected`(NoMutant — 실행기가 올린 변이 없음)
 - 항목이 빠지거나 비어 있는 기록은 실행기가 쓰지 않고 `invalid_decisions`로 센다
-- 판단 기록·검사 설정·결과 파일을 고치려 하면 보호 훅이 사용자 허락을 받는다. 허락 창은 사용자가 근거·승인자·범위를 확인하는 자리다
+- AI는 `approved_by`를 쓰지 않는다 — 사용자가 근거를 확인하고 직접 채운다
+- 보호 훅은 보조 수단이다. 전역 설치(`make sync-system`)의 Claude에서는 판단 기록·검사 설정·결과·도구 설정·CI 워크플로를 고치려 하면 허락 창을 띄우고, Codex에서는 막는다 — Codex에서는 사용자가 직접 편집한다. 플러그인 설치에는 이 훅이 없다. 실제 강제는 앱 레포의 CODEOWNERS 리뷰와 CI가 맡는다
 
 ## 보고
 
