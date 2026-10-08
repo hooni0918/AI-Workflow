@@ -250,6 +250,29 @@ class PlanScopeTests(unittest.TestCase):
         self.assertEqual(module["targets"], {})
         self.assertFalse(module["widened"])
 
+    def test_non_ascii_and_space_paths_are_targets(self):
+        # git 은 한글 경로를 8진수로 인용하고 공백 경로 머리줄 끝에 탭을 붙인다 — 그래도 범위에 들어가야 한다
+        self.repo.write("Packages/Wallet/Sources/Wallet/잔액.swift", "let a = 1\n")
+        self.repo.write("Packages/Wallet/Sources/Wallet/Pay Helper.swift", "let b = 1\n")
+        self.repo.commit("add")
+        self.repo.write("Packages/Wallet/Sources/Wallet/잔액.swift", "let a = 1 > 0\n")
+        self.repo.write("Packages/Wallet/Sources/Wallet/Pay Helper.swift", "let b = 1 > 0\n")
+        self.repo.write("Packages/Wallet/Sources/Wallet/새파일.swift", "let c = 2\n")
+        targets = self.plan()["modules"]["Wallet"]["targets"]
+        self.assertEqual(targets["Packages/Wallet/Sources/Wallet/잔액.swift"], [1])
+        self.assertEqual(targets["Packages/Wallet/Sources/Wallet/Pay Helper.swift"], [1])
+        self.assertEqual(targets["Packages/Wallet/Sources/Wallet/새파일.swift"], "all")
+
+    def test_file_moved_in_from_ignored_location_is_fully_targeted(self):
+        self.repo.write("App/Fee.swift", "struct Fee {\n    let ok = 1 >= 0\n}\n")
+        self.repo.commit("fee in app")
+        self.repo.git("checkout", "-q", "-b", "move")
+        self.repo.git("mv", "App/Fee.swift", "Packages/Wallet/Sources/Wallet/Fee.swift")
+        self.repo.commit("move")
+        self.config["ignore"] = ["App/**"]
+        targets = gate.plan_scope(self.repo.path, self.config, base="feature")["modules"]["Wallet"]["targets"]
+        self.assertEqual(targets["Packages/Wallet/Sources/Wallet/Fee.swift"], [1, 2, 3])
+
     def test_unknown_base_is_incomplete_not_empty(self):
         with self.assertRaises(gate.IncompleteError):
             self.plan(base="no-such-branch")

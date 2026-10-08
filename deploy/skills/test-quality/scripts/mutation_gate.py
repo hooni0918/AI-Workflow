@@ -140,45 +140,38 @@ def load_config(path):
 
 
 def git(repo, *args):
-    result = subprocess.run(["git", "-C", repo, *args], capture_output=True, text=True)
+    # 경로 이름에 *·[ 가 있어도 패턴으로 풀지 않도록 literal pathspec 으로 돌린다.
+    result = subprocess.run(["git", "--literal-pathspecs", "-C", repo, *args], capture_output=True)
     if result.returncode != 0:
-        raise IncompleteError(f"git {' '.join(args)} 실패: {result.stderr.strip()}")
-    return result.stdout
+        stderr = result.stderr.decode("utf-8", "replace").strip()
+        raise IncompleteError(f"git {' '.join(args)} 실패: {stderr}")
+    return result.stdout.decode("utf-8", "replace")
+
+
+def _nul_paths(text):
+    return [path for path in text.split("\0") if path]
 
 
 _HUNK = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
 
 
-def parse_diff(text):
-    # unified diff(-U0) → {새 경로: 바뀐 줄 번호 집합}. 삭제된 파일은 빈 집합으로 남긴다.
-    # 줄만 지운 자리(+c,0)는 새 줄이 없으므로 앞뒤 줄을 대상으로 본다 — 조건 한 줄을 지운
-    # 변경도 그 주변 로직의 검사로 이어지게 한다.
-    changes = {}
-    old_path = None
-    current = None
+def changed_lines(repo, merge_base, path):
+    # 한 파일의 바뀐 줄 번호. 머리줄의 경로는 읽지 않는다 — git 이 한글은 8진수로 인용하고 공백
+    # 경로 끝에는 탭을 붙여, 머리줄에서 경로를 잘라 쓰면 변경이 범위에서 빠진다(실측).
+    # 줄만 지운 자리(+c,0)는 새 줄이 없으므로 앞뒤 줄을 대상으로 본다.
+    text = git(repo, "diff", "-U0", "--no-color", "--no-renames", merge_base, "--", path)
+    lines = set()
     for line in text.splitlines():
-        if line.startswith("--- "):
-            old_path = line[4:]
-            old_path = old_path[2:] if old_path.startswith("a/") else old_path
-            continue
-        if line.startswith("+++ "):
-            new_path = line[4:]
-            if new_path == "/dev/null":
-                current = None
-                changes.setdefault(old_path, set())
-            else:
-                current = new_path[2:] if new_path.startswith("b/") else new_path
-                changes.setdefault(current, set())
-            continue
         match = _HUNK.match(line)
-        if match and current is not None:
-            start = int(match.group(1))
-            count = int(match.group(2)) if match.group(2) is not None else 1
-            if count == 0:
-                changes[current].update(n for n in (start, start + 1) if n > 0)
-            else:
-                changes[current].update(range(start, start + count))
-    return changes
+        if not match:
+            continue
+        start = int(match.group(1))
+        count = int(match.group(2)) if match.group(2) is not None else 1
+        if count == 0:
+            lines.update(n for n in (start, start + 1) if n > 0)
+        else:
+            lines.update(range(start, start + count))
+    return lines
 
 
 def _under(path, dirs):
@@ -210,10 +203,13 @@ def plan_scope(repo, config, base=None):
     # 추적 안 된 새 파일도 포함한다 — 커밋 전 로컬 검사에서 새 파일이 빠지면 안 된다.
     base = base or config["base"]
     merge_base = git(repo, "merge-base", "HEAD", base).strip()
-    changes = parse_diff(git(repo, "diff", "-U0", "-M", "--no-color", merge_base))
-    for path in git(repo, "ls-files", "--others", "--exclude-standard").splitlines():
-        if path:
-            changes[path] = None  # None = 파일 전체
+    # 경로 목록은 NUL 구분(-z)으로 받아 인용·이스케이프 없이 쓴다. 이름 변경은 새 파일로 본다
+    # (--no-renames) — 검사 제외 위치에서 옮겨 온 로직이 "바뀐 줄 없음"으로 빠지지 않게 한다.
+    changes = {}
+    for path in _nul_paths(git(repo, "diff", "--name-only", "-z", "--no-renames", merge_base)):
+        changes[path] = set()
+    for path in _nul_paths(git(repo, "ls-files", "-z", "--others", "--exclude-standard")):
+        changes[path] = None  # None = 파일 전체
 
     modules = {
         m["name"]: {"targets": {}, "widened": False, "source_changed": [], "test_changed": []}
@@ -250,8 +246,10 @@ def plan_scope(repo, config, base=None):
                 lines = changes[path]
                 if lines is None:
                     entry["targets"][path] = "all"
-                elif lines:
-                    entry["targets"][path] = sorted(lines)
+                else:
+                    lines = changed_lines(repo, merge_base, path)
+                    if lines:
+                        entry["targets"][path] = sorted(lines)
 
     for module in config["modules"]:
         entry = modules[module["name"]]
