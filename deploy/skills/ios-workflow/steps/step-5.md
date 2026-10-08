@@ -81,7 +81,7 @@ IMPL 중 디자인 또는 기획이 바뀐 사실을 감지하면 캐시된 산�
 
 | 구현자 | 진실검사 A (메커니즘) | 규칙검사 B | 증분 단위 |
 |---|---|---|---|
-| Feature Implementer | 테스트 실행 green(swift test/xcodebuild test) + 테스트 TODO 커버리지. 종료 커버리지에 변이 검사 미해결 0건 추가(프로필 「테스트 품질 검사」 채택 시 — [test-quality](../../test-quality/SKILL.md)). 오라클형(실행이 곧 판정). | Coding-Standards ×N (SwiftLint 포함) + Advanced (로직 rules) | 로직 커밋 |
+| Feature Implementer | 테스트 실행 green(swift test/xcodebuild test) + 테스트 TODO 커버리지. 오라클형(실행이 곧 판정). | Coding-Standards ×N (SwiftLint 포함) + Advanced (로직 rules) | 로직 커밋 |
 
 ### Step 5.3.1. 슬라이스 사이클 종료
 
