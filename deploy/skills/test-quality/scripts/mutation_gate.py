@@ -25,6 +25,8 @@ EXIT_UNRESOLVED = 1
 EXIT_INCOMPLETE = 2
 EXIT_USAGE = 3
 
+DECISIONS_PATH = ".test-quality/decisions.json"
+
 
 class ConfigError(Exception):
     pass
@@ -63,6 +65,16 @@ def _require(obj, key, kind, where):
     return obj[key]
 
 
+def _string_list(obj, key, where, default=None):
+    # 경로·패턴 목록. 문자열 하나를 목록 대신 쓰면 글자 단위로 풀려 범위가 조용히 틀어진다.
+    if key not in obj and default is not None:
+        obj[key] = list(default)
+    value = _require(obj, key, list, where)
+    if not all(isinstance(item, str) and item for item in value):
+        raise ConfigError(f"{where}.{key} 는 비어 있지 않은 문자열 목록이어야 합니다")
+    return value
+
+
 def _norm_dir(path):
     return path.strip("/").replace("\\", "/")
 
@@ -93,29 +105,30 @@ def load_config(path):
     extensions = _require(config, "source_extensions", list, "config")
     if not extensions or not all(isinstance(e, str) and e.startswith(".") for e in extensions):
         raise ConfigError("config.source_extensions 는 '.swift' 같은 확장자 목록이어야 합니다")
-    config.setdefault("ignore", [])
-    config.setdefault("decisions", ".test-quality/decisions.json")
+    _string_list(config, "ignore", "config", default=[])
+    # 판단 기록 위치는 고정한다 — 보호 훅·CODEOWNERS 가 지키는 .test-quality/ 밖으로 옮기면
+    # 승인 없이 고칠 수 있게 된다.
+    if config.setdefault("decisions", DECISIONS_PATH) != DECISIONS_PATH:
+        raise ConfigError(f"config.decisions 는 {DECISIONS_PATH} 로 고정입니다")
 
     tool = _require(config, "tool", dict, "config")
     for key in ("name", "version"):
         _require(tool, key, str, "config.tool")
     _check_command(_require(tool, "command", list, "config.tool"), "config.tool.command")
-    tool.setdefault("timeout_seconds", 7200)
+    timeout = tool.setdefault("timeout_seconds", 7200)
+    if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or timeout <= 0:
+        raise ConfigError("config.tool.timeout_seconds 는 양수여야 합니다")
+    # 버전을 확인하지 않으면 다른 버전(변이 종류가 다른) 도구로 돈 결과가 통과로 나온다
     version_command = tool.get("version_command")
-    if version_command is not None and (
-            not isinstance(version_command, list) or not version_command
+    if (not isinstance(version_command, list) or not version_command
             or not all(isinstance(part, str) for part in version_command)):
-        raise ConfigError("config.tool.version_command 는 문자열 목록이어야 합니다")
+        raise ConfigError("config.tool.version_command 는 문자열 목록이어야 합니다(필수)")
     status_map = tool.setdefault("status_map", {})
     if not isinstance(status_map, dict) or not all(
             isinstance(k, str) and v in STRYKER_STATUSES for k, v in status_map.items()):
         raise ConfigError("config.tool.status_map 은 {도구 상태: Stryker 상태} 객체여야 합니다")
-    markers = tool.setdefault("suppression_markers", [])
-    if not isinstance(markers, list) or not all(isinstance(m, str) and m for m in markers):
-        raise ConfigError("config.tool.suppression_markers 는 문자열 목록이어야 합니다")
-    config_files = tool.setdefault("config_files", [])
-    if not isinstance(config_files, list) or not all(isinstance(f, str) and f for f in config_files):
-        raise ConfigError("config.tool.config_files 는 모듈 폴더 기준 파일 이름 목록이어야 합니다")
+    _string_list(tool, "suppression_markers", "config.tool", default=[])
+    _string_list(tool, "config_files", "config.tool", default=[])
 
     modules = _require(config, "modules", list, "config")
     if not modules:
@@ -131,7 +144,7 @@ def load_config(path):
         names.add(name)
         module["path"] = _norm_dir(_require(module, "path", str, where))
         for key in ("sources", "tests"):
-            dirs = _require(module, key, list, where)
+            dirs = _string_list(module, key, where)
             if not dirs:
                 raise ConfigError(f"{where}.{key} 가 비어 있습니다")
             module[key] = [_norm_dir(d) for d in dirs]
@@ -141,8 +154,11 @@ def load_config(path):
         if "command" in module:
             # 한 앱에 시뮬레이터 모듈과 호스트(macOS) 모듈이 섞이면 도구 인자가 다르다
             _check_command(module["command"], f"{where}.command")
-        module.setdefault("vars", {})
-        module.setdefault("fingerprint", [])
+        values = module.setdefault("vars", {})
+        if not isinstance(values, dict) or not all(
+                isinstance(k, str) and isinstance(v, str) for k, v in values.items()):
+            raise ConfigError(f"{where}.vars 는 {{이름: 문자열}} 객체여야 합니다")
+        _string_list(module, "fingerprint", where, default=[])
     return config
 
 

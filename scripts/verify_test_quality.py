@@ -25,6 +25,7 @@ def base_config(**overrides):
             "name": "fake",
             "version": "1",
             "command": ["fake-tool", "{module_path}", "--output", "{report}"],
+            "version_command": [sys.executable, "-c", "print('fake 1')"],
         },
         "modules": [
             {
@@ -159,6 +160,32 @@ class ConfigTests(unittest.TestCase):
             write_json(self.path, base_config(tool=dict(base_config()["tool"], config_files=bad)))
             with self.assertRaises(gate.ConfigError):
                 gate.load_config(self.path)
+
+    def test_lists_and_vars_must_have_the_right_shape(self):
+        # 문자열 하나를 목록 자리에 쓰면 글자 단위로 풀려 범위가 조용히 틀어진다
+        bad_configs = [base_config(ignore="App/**")]
+        for key, value in (("sources", "Packages/Wallet/Sources"), ("tests", [1]),
+                           ("fingerprint", "Package.swift"), ("vars", ["scheme"]), ("vars", {"scheme": 1})):
+            config = base_config()
+            config["modules"][0][key] = value
+            bad_configs.append(config)
+        for config in bad_configs:
+            write_json(self.path, config)
+            with self.assertRaises(gate.ConfigError):
+                gate.load_config(self.path)
+
+    def test_version_command_is_required(self):
+        config = base_config()
+        del config["tool"]["version_command"]
+        write_json(self.path, config)
+        with self.assertRaises(gate.ConfigError):
+            gate.load_config(self.path)
+
+    def test_decisions_path_is_fixed(self):
+        # 보호 훅·CODEOWNERS 가 지키는 .test-quality/ 밖으로 옮기지 못하게 한다
+        write_json(self.path, base_config(decisions="docs/decisions.json"))
+        with self.assertRaises(gate.ConfigError):
+            gate.load_config(self.path)
 
     def test_check_config_exit_codes(self):
         write_json(self.path, base_config())
