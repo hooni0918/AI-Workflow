@@ -15,7 +15,9 @@ test_quality_protected.txt에 적힌 파일(판단 기록·검사 설정·결과
 - Edit·Write: file_path. Codex apply_patch: 패치 머리줄의 파일 경로 (본문은 보지 않는다)
 - Bash·Monitor: 명령을 구간(; && || | 등)으로 나눠 본다. 게이트(mutation_gate.py)의 run·verify·
   plan·check-config 구간과 읽기 전용 명령(cat·grep·git status·git add 등) 구간은 쓰기 리다이렉트
-  대상만 본다. judge 는 손으로 만든 보고서로 결과를 쓸 수 있어 면제하지 않는다
+  대상만 본다. judge 는 손으로 만든 보고서로 결과를 쓸 수 있어 면제하지 않는다.
+  경로를 적지 않고 작업 트리 전체를 바꾸는 git 명령(apply·am·stash pop·하드 리셋·checkout .)은
+  .test-quality/ 가 있는 레포에서만 묻는다 — 다른 레포에서는 묻지 않는다
 - 그 밖의 도구와 description 같은 다른 입력은 보지 않는다
 """
 import json
@@ -120,6 +122,52 @@ def _exempt(words):
     return False
 
 
+def _git_args(words):
+    # git 하위 명령, 그 뒤 인자, -C 경로. git 구간이 아니면 None.
+    rest = list(words)
+    while rest and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", rest[0]):
+        rest.pop(0)
+    if not rest or os.path.basename(rest[0]) != "git":
+        return None
+    directory = None
+    args = rest[1:]
+    while args and args[0].startswith("-"):
+        option = args.pop(0)
+        if option in _GIT_VALUE_OPTIONS and args:
+            value = args.pop(0)
+            if option == "-C":
+                directory = value
+    if not args:
+        return None
+    return args[0], args[1:], directory
+
+
+def _tree_wide_git(words):
+    # 경로 없이 작업 트리 전체를 바꾸는 git 명령이면 그 레포 경로(-C 없으면 ""), 아니면 None
+    parsed = _git_args(words)
+    if parsed is None:
+        return None
+    sub, tail, directory = parsed
+    if (sub in ("apply", "am")
+            or (sub == "stash" and tail[:1] in (["pop"], ["apply"]))
+            or (sub == "reset" and "--hard" in tail)
+            or (sub in ("checkout", "restore") and any(arg in (".", "./", ":/") for arg in tail))):
+        return directory or ""
+    return None
+
+
+def _has_test_quality(start):
+    # start 가 속한 git 레포 최상위에 .test-quality/ 가 있는가
+    path = os.path.abspath(start)
+    while True:
+        if os.path.exists(os.path.join(path, ".git")):
+            return os.path.isdir(os.path.join(path, ".test-quality"))
+        parent = os.path.dirname(path)
+        if parent == path:
+            return False
+        path = parent
+
+
 def command_hits(command, cwd, patterns):
     segments = _segments(command)
     if segments is None:
@@ -132,6 +180,10 @@ def command_hits(command, cwd, patterns):
             found += hits(target, patterns)
             if in_protected_dir and not target.startswith(("/", "~")):
                 found.append(f"{cwd} 안의 {target}")
+        tree_wide = _tree_wide_git(words)
+        if tree_wide is not None and cwd and _has_test_quality(os.path.join(cwd, os.path.expanduser(tree_wide))):
+            found.append("작업 트리 전체를 바꾸는 git 명령")
+            continue
         if _exempt(words):
             continue
         for word in words:

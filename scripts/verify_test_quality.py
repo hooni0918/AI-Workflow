@@ -1058,6 +1058,23 @@ class ProtectHookTests(unittest.TestCase):
         decisions = "*** Begin Patch\n*** Update File: .test-quality/decisions.json\n@@\n-a\n+b\n*** End Patch"
         self.assertEqual(self.decision_of("apply_patch", {"command": decisions}), "ask")
 
+    def test_tree_wide_git_asks_only_in_repo_with_test_quality(self):
+        # 경로 없이 작업 트리 전체를 바꾸는 git 명령은 보호 파일도 바꾼다. 다른 레포에서는 묻지 않는다
+        with tempfile.TemporaryDirectory() as app, tempfile.TemporaryDirectory() as other:
+            for root in (app, other):
+                os.makedirs(os.path.join(root, ".git"))
+            os.makedirs(os.path.join(app, ".test-quality"))
+            os.makedirs(os.path.join(app, "Sources"))
+            commands = ("git apply /tmp/x.patch", "git stash pop", "git reset --hard",
+                        "git checkout -- .", "git restore .")
+            for command in commands:
+                self.assertEqual(self.decision_of("Bash", {"command": command}, cwd=os.path.join(app, "Sources")),
+                                 "ask", command)
+                self.assertIsNone(self.decision_of("Bash", {"command": command}, cwd=other), command)
+            self.assertEqual(self.decision_of("Bash", {"command": f"git -C {app} stash pop"}, cwd=other), "ask")
+            for command in ("git checkout main", "git stash", "git reset --soft HEAD~1"):
+                self.assertIsNone(self.decision_of("Bash", {"command": command}, cwd=app), command)
+
     def test_ci_workflow_is_protected(self):
         # continue-on-error 를 넣으면 미해결이 있어도 필수 상태 검사가 초록이 된다
         self.assertEqual(self.decision_of("Edit", {"file_path": "/app/.github/workflows/test-quality.yml"}), "ask")
