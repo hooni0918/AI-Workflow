@@ -215,6 +215,23 @@ class PlanScopeTests(unittest.TestCase):
         self.assertFalse(module["widened"])
         self.assertEqual(list(module["targets"]), ["Packages/Wallet/Sources/Wallet/Wallet.swift"])
 
+    def test_test_change_with_only_resource_delete_or_comment_still_widens(self):
+        # 리뷰 재현: 테스트 단언을 지우면서 리소스·삭제·주석만 함께 바꾸면 넓히지 않아 해당 없음이 됐다
+        cases = {
+            "resource": lambda: self.repo.write("Packages/Wallet/Sources/Wallet/Resources/strings.json", "{}\n"),
+            "delete": lambda: os.remove(os.path.join(self.repo.path, LABELS_PATH)),
+            "comment": lambda: self.repo.write(LABELS_PATH, "// note\n" + LABELS),
+        }
+        for name, change in cases.items():
+            with self.subTest(name):
+                self.repo.git("checkout", "-q", "-B", f"case-{name}", "feature")
+                self.repo.write("Packages/Wallet/Tests/WalletTests/WalletTests.swift", WALLET_TEST.replace("pays", "weaker"))
+                change()
+                self.repo.commit(name)
+                module = gate.plan_scope(self.repo.path, self.config, base="feature")["modules"]["Wallet"]
+                self.assertTrue(module["widened"])
+                self.assertEqual(module["targets"].get(WALLET_PATH), "all")
+
     def test_uncommitted_and_untracked_changes_are_included(self):
         self.repo.write("Packages/Wallet/Sources/Wallet/New.swift", "let x = 1 > 0\n")
         self.repo.write("Packages/Wallet/Sources/Wallet/Wallet.swift", WALLET.replace("amount > 0", "amount >= 0"))

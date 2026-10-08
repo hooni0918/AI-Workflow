@@ -256,10 +256,24 @@ def plan_scope(repo, config, base=None):
 
     for module in config["modules"]:
         entry = modules[module["name"]]
-        if entry["test_changed"] and not entry["source_changed"]:
+        # 테스트가 바뀌었는데 로직 코드 줄 변경이 없으면(리소스·삭제·주석만 함께 바뀐 경우 포함)
+        # 테스트가 겨냥한 로직을 알 수 없으므로 모듈 로직 전체로 넓힌다.
+        code_changed = any(_has_code(repo, path, lines) for path, lines in entry["targets"].items())
+        if entry["test_changed"] and not code_changed:
             entry["widened"] = True
             entry["targets"] = {path: "all" for path in _module_logic_files(repo, module, config)}
     return plan
+
+
+def _is_code_line(line):
+    stripped = line.strip()
+    return bool(stripped) and not stripped.startswith(("//", "/*", "*"))
+
+
+def _has_code(repo, path, lines):
+    source = _read_lines(repo, path)
+    numbers = range(1, len(source) + 1) if lines == "all" else lines
+    return any(_is_code_line(source[n - 1]) for n in numbers if 0 < n <= len(source))
 
 
 STRYKER_STATUSES = {
