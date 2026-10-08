@@ -106,6 +106,10 @@ def load_config(path):
             not isinstance(version_command, list) or not version_command
             or not all(isinstance(part, str) for part in version_command)):
         raise ConfigError("config.tool.version_command 는 문자열 목록이어야 합니다")
+    status_map = tool.setdefault("status_map", {})
+    if not isinstance(status_map, dict) or not all(
+            isinstance(k, str) and v in STRYKER_STATUSES for k, v in status_map.items()):
+        raise ConfigError("config.tool.status_map 은 {도구 상태: Stryker 상태} 객체여야 합니다")
     markers = tool.setdefault("suppression_markers", [])
     if not isinstance(markers, list) or not all(isinstance(m, str) and m for m in markers):
         raise ConfigError("config.tool.suppression_markers 는 문자열 목록이어야 합니다")
@@ -318,9 +322,11 @@ def resolve_report_path(key, repo, roots, known_files):
     return best
 
 
-def load_report(path, repo, roots, known_files):
+def load_report(path, repo, roots, known_files, status_map=None):
     # Stryker 보고서(mutation-testing-report-schema) → 변이 목록. 읽을 수 없거나 형식이 다르면
-    # 판정 근거가 없으므로 미완료다.
+    # 판정 근거가 없으므로 미완료다. 도구 고유 상태는 status_map 으로 표준 상태에 대응시킨다
+    # (예: swift-mutation-testing 1.5.1 은 Unviable·Crash 를 낸다).
+    status_map = status_map or {}
     try:
         with open(path, encoding="utf-8") as handle:
             data = json.load(handle)
@@ -340,6 +346,7 @@ def load_report(path, repo, roots, known_files):
             continue
         for raw in entry.get("mutants", []) if isinstance(entry, dict) else []:
             status = raw.get("status")
+            status = status_map.get(status, status) if isinstance(status, str) else status
             if status not in STRYKER_STATUSES:
                 raise IncompleteError(f"알 수 없는 변이 상태 {status!r}: {path}")
             try:
@@ -671,7 +678,8 @@ def judge_reports(repo, config_path, config, plan, reports, module_errors=None):
             missing.append(name)
             continue
         try:
-            loaded, _ = load_report(reports[name], repo, [os.path.join(repo, module["path"])], known)
+            loaded, _ = load_report(reports[name], repo, [os.path.join(repo, module["path"])], known,
+                                    config["tool"]["status_map"])
         except IncompleteError as error:
             # 한 모듈의 결과가 깨져도 결과 파일은 남긴다 — CI 산출물로 사유를 볼 수 있어야 한다
             extra.append(f"모듈 {name}: {error}")

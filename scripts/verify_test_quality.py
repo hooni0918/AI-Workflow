@@ -354,6 +354,16 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(mutants, [])
         self.assertEqual(unresolved, ["Elsewhere/Other.swift"])
 
+    def test_tool_specific_statuses_are_mapped(self):
+        # swift-mutation-testing 1.5.1 소스: unviable → "Unviable", killedByCrash → "Crash"
+        write_json(self.report, stryker_report("Sources/Wallet/Wallet.swift",
+                                               [(5, "ROR", ">", "Unviable"), (6, "ROR", "<", "Crash")]))
+        mutants, _ = gate.load_report(self.report, self.repo, [self.module_root], self.KNOWN,
+                                      {"Unviable": "CompileError", "Crash": "RuntimeError"})
+        self.assertEqual([m["status"] for m in mutants], ["CompileError", "RuntimeError"])
+        with self.assertRaises(gate.IncompleteError):
+            gate.load_report(self.report, self.repo, [self.module_root], self.KNOWN)
+
     def test_unknown_status_is_incomplete(self):
         with self.assertRaises(gate.IncompleteError):
             self.load("Sources/Wallet/Wallet.swift", [(5, "ROR", ">", "Maybe")])
