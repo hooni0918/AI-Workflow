@@ -18,7 +18,7 @@ import subprocess
 import sys
 import tempfile
 
-RUNNER_VERSION = "0.1.0"
+RUNNER_VERSION = "0.2.0"
 
 EXIT_PASS = 0
 EXIT_UNRESOLVED = 1
