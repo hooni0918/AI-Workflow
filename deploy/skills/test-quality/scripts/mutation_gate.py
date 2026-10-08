@@ -795,8 +795,11 @@ def _module_report_files(repo, module, config):
     return sorted(files)
 
 
-def judge_reports(repo, config_path, config, plan, reports, module_errors=None):
+def judge_reports(repo, config_path, config, plan, reports, module_errors=None,
+                  produced_by="judge", fingerprint_before=None):
     # reports: {모듈 이름: 결과 파일 경로}. 범위가 있는 모듈의 결과가 없으면 미완료다.
+    # fingerprint_before: 도구를 돌리기 전에 잰 지문. 판정 뒤 지문과 다르면 검사 도중 내용이
+    # 바뀐 것이라, 결과가 어느 내용을 검사했는지 알 수 없다.
     module_errors = module_errors or {}
     decisions, invalid = load_decisions(os.path.join(repo, config["decisions"]))
     mutants, counts, extra, missing = [], {}, [], []
@@ -826,10 +829,15 @@ def judge_reports(repo, config_path, config, plan, reports, module_errors=None):
                    suppressions=suppression_items(repo, plan, config["tool"]["suppression_markers"])
                    + tool_config_items(repo, plan))
     judged["invalid_decisions"] = len(invalid)
+    fingerprint_after = fingerprint(repo, config_path, config, plan)
+    if fingerprint_before is not None and fingerprint_before != fingerprint_after:
+        extra.append("검사 도중 코드·테스트·설정·판단 기록이 바뀌었습니다 — 다시 실행한다")
     if extra:
         judged["incomplete_reasons"] = extra + judged["incomplete_reasons"]
         judged["verdict"] = "incomplete"
-    return build_result(config, plan, judged, fingerprint(repo, config_path, config, plan))
+    result = build_result(config, plan, judged, fingerprint_after)
+    result["produced_by"] = produced_by
+    return result
 
 
 def _run_logged(argv, cwd, timeout, log_path):
@@ -851,6 +859,7 @@ def run_gate(repo, config_path, config, base, work_dir, overrides):
     # 범위 계산 → 모듈별 기준 테스트 → 변이 도구 → 판정. 모듈 하나의 실패가 다른 모듈 결과를
     # 가리지 않도록 실패는 사유로 모아 두고, 판정 단계에서 미완료로 합친다.
     plan = plan_scope(repo, config, base)
+    before = fingerprint(repo, config_path, config, plan)
     tool = config["tool"]
     reports, errors = {}, {}
     version_error = None
@@ -902,7 +911,8 @@ def run_gate(repo, config_path, config, base, work_dir, overrides):
             reports[name] = report
         except IncompleteError as error:
             errors[name] = f"모듈 {name}: {error}"
-    return judge_reports(repo, config_path, config, plan, reports, errors)
+    return judge_reports(repo, config_path, config, plan, reports, errors,
+                         produced_by="run", fingerprint_before=before)
 
 
 def verify(repo, config_path, config, result_path, base=None):
@@ -914,6 +924,11 @@ def verify(repo, config_path, config, result_path, base=None):
             result = json.load(handle)
     except (OSError, json.JSONDecodeError) as error:
         return EXIT_INCOMPLETE, f"결과 파일을 읽을 수 없습니다 ({error})"
+    if not isinstance(result, dict):
+        return EXIT_INCOMPLETE, "결과 파일 형식이 맞지 않습니다"
+    if result.get("produced_by") != "run":
+        # judge 는 이미 있는 보고서를 판정할 뿐 기준 테스트·도구 실행을 거치지 않는다
+        return EXIT_INCOMPLETE, "run 으로 만든 결과가 아닙니다 — 변이 도구를 실제로 돌린 결과만 인정한다"
     plan = plan_scope(repo, config, base)
     current = fingerprint(repo, config_path, config, plan)
     if result.get("fingerprint") != current:

@@ -640,42 +640,63 @@ class ResultAndVerifyTests(unittest.TestCase):
         self.repo.cleanup()
         self.outside.cleanup()
 
-    def judge_cli(self, status, extra_reports=True):
-        write_json(self.report_path, stryker_report("Sources/Wallet/Wallet.swift", [(5, "ROR", ">", status)]))
-        args = ["judge", "--config", self.config_path, "--repo", self.repo.path, "--out", self.result_path]
-        if extra_reports:
-            args += ["--report", f"Wallet={self.report_path}"]
-        return gate.main(args)
+    def check_cli(self, status, extra_reports=True):
+        # verify 는 run 결과만 인정하므로 가짜 도구로 run 을 돌린다. 보고서 없이 판정하는 경우만 judge
+        if not extra_reports:
+            return gate.main(["judge", "--config", self.config_path, "--repo", self.repo.path,
+                              "--out", self.result_path])
+        fake = os.path.join(self.outside.name, "fake_tool.py")
+        with open(fake, "w", encoding="utf-8") as handle:
+            handle.write(FAKE_TOOL)
+        config = base_config()
+        config["modules"][0]["fingerprint"] = ["Packages/Wallet/Package.swift"]
+        config["tool"]["command"] = [sys.executable, fake, "{report}", status]
+        write_json(self.config_path, config)
+        return gate.main(["run", "--config", self.config_path, "--repo", self.repo.path,
+                          "--out", self.result_path, "--work-dir", os.path.join(self.outside.name, "work")])
 
     def verify_cli(self):
         return gate.main(["verify", "--config", self.config_path, "--repo", self.repo.path,
                           "--result", self.result_path])
 
     def test_pass_then_verify_passes(self):
-        self.assertEqual(self.judge_cli("Killed"), gate.EXIT_PASS)
+        self.assertEqual(self.check_cli("Killed"), gate.EXIT_PASS)
         self.assertEqual(self.verify_cli(), gate.EXIT_PASS)
 
     def test_survivor_fails_and_verify_reports_fail(self):
-        self.assertEqual(self.judge_cli("Survived"), gate.EXIT_UNRESOLVED)
+        self.assertEqual(self.check_cli("Survived"), gate.EXIT_UNRESOLVED)
         self.assertEqual(self.verify_cli(), gate.EXIT_UNRESOLVED)
 
     def test_test_edit_after_check_makes_result_stale(self):
-        self.judge_cli("Killed")
+        self.check_cli("Killed")
         self.repo.write("Packages/Wallet/Tests/WalletTests/WalletTests.swift", WALLET_TEST + "// weaker\n")
         self.assertEqual(self.verify_cli(), gate.EXIT_INCOMPLETE)
 
     def test_decision_edit_after_check_makes_result_stale(self):
-        self.judge_cli("Killed")
+        self.check_cli("Killed")
         write_json(os.path.join(self.repo.path, ".test-quality/decisions.json"), {"decisions": []})
         self.assertEqual(self.verify_cli(), gate.EXIT_INCOMPLETE)
 
     def test_commit_rewrite_without_content_change_stays_valid(self):
-        self.judge_cli("Killed")
+        self.check_cli("Killed")
         self.repo.git("commit", "-q", "--amend", "-m", "reworded")
         self.assertEqual(self.verify_cli(), gate.EXIT_PASS)
 
     def test_missing_result_is_incomplete(self):
         self.assertEqual(self.verify_cli(), gate.EXIT_INCOMPLETE)
+
+    def test_judge_result_is_not_accepted_by_verify(self):
+        # judge 는 보고서만 읽어 판정한다. 손으로 만든 보고서로 통과를 만들 수 있으므로 verify 가 받지 않는다
+        write_json(self.report_path, stryker_report("Sources/Wallet/Wallet.swift", [(5, "ROR", ">", "Killed")]))
+        code = gate.main(["judge", "--config", self.config_path, "--repo", self.repo.path,
+                          "--out", self.result_path, "--report", f"Wallet={self.report_path}"])
+        self.assertEqual(code, gate.EXIT_PASS)
+        self.assertEqual(self.verify_cli(), gate.EXIT_INCOMPLETE)
+
+    def test_change_during_run_is_incomplete(self):
+        self.assertEqual(self.check_cli("edit"), gate.EXIT_INCOMPLETE)
+        with open(self.result_path, encoding="utf-8") as handle:
+            self.assertIn("검사 도중", handle.read())
 
     def test_unresolved_output_shows_original_operator_and_column(self):
         import io
@@ -753,7 +774,7 @@ class ResultAndVerifyTests(unittest.TestCase):
         self.assertEqual((code, result["verdict"]), (gate.EXIT_UNRESOLVED, "fail"))
 
     def test_module_in_scope_without_report_is_incomplete(self):
-        self.assertEqual(self.judge_cli("Killed", extra_reports=False), gate.EXIT_INCOMPLETE)
+        self.assertEqual(self.check_cli("Killed", extra_reports=False), gate.EXIT_INCOMPLETE)
         with open(self.result_path, encoding="utf-8") as handle:
             self.assertIn("변이 결과가 없습니다", handle.read())
 
@@ -761,6 +782,10 @@ class ResultAndVerifyTests(unittest.TestCase):
 FAKE_TOOL = r'''
 import json, sys, time
 report, mode = sys.argv[1], sys.argv[2]
+if mode == "edit":  # 검사 도중 소스가 바뀌는 경우
+    with open("Sources/Wallet/Wallet.swift", "a") as handle:
+        handle.write("// edited\n")
+    mode = "Killed"
 if mode == "sleep":
     time.sleep(5)
 if mode == "crash":
