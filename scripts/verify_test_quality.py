@@ -354,6 +354,16 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(mutants, [])
         self.assertEqual(unresolved, ["Elsewhere/Other.swift"])
 
+    def test_folder_mismatch_with_same_file_name_is_not_guessed(self):
+        # 이름만 같은 다른 위치의 파일 결과가 검사 대상 파일로 섞이면 안 된다
+        for key in ("Elsewhere/Wallet.swift", "/somewhere/else/Wallet.swift"):
+            mutants, unresolved = self.load(key, [(1, "ROR", ">", "Killed")])
+            self.assertEqual((mutants, unresolved), ([], [key]))
+
+    def test_bare_file_name_is_matched_only_when_unique(self):
+        mutants, _ = self.load("Labels.swift", [(1, "ROR", ">", "Killed")])
+        self.assertEqual(mutants[0]["file"], "Packages/Wallet/Sources/Wallet/Labels.swift")
+
     def test_tool_specific_statuses_are_mapped(self):
         # swift-mutation-testing 1.5.1 소스: unviable → "Unviable", killedByCrash → "Crash"
         write_json(self.report, stryker_report("Sources/Wallet/Wallet.swift",
@@ -672,6 +682,27 @@ class ResultAndVerifyTests(unittest.TestCase):
         buffer = io.StringIO()
         gate.print_result(result, out=buffer)
         self.assertIn("Wallet.swift:5:34 ROR >= → >", buffer.getvalue())
+
+    def test_unmapped_report_key_is_incomplete(self):
+        write_json(self.report_path, stryker_report("ain/Wallet.swift", [(5, "ROR", ">", "Survived")]))
+        args = ["judge", "--config", self.config_path, "--repo", self.repo.path, "--out", self.result_path,
+                "--report", f"Wallet={self.report_path}"]
+        self.assertEqual(gate.main(args), gate.EXIT_INCOMPLETE)
+        with open(self.result_path, encoding="utf-8") as handle:
+            self.assertIn("연결할 수 없습니다: ain/Wallet.swift", handle.read())
+
+    def test_ignored_file_report_is_not_mixed_into_target(self):
+        # 검사 제외 파일의 결과가 이름이 같은 검사 대상 파일로 연결되면 거짓 통과가 된다
+        config = base_config()
+        config["ignore"] = ["**/Generated/**"]
+        write_json(self.config_path, config)
+        self.repo.write("Packages/Wallet/Sources/Wallet/Generated/Wallet.swift", WALLET)
+        self.repo.commit("generated")
+        write_json(self.report_path, stryker_report("Sources/Wallet/Generated/Wallet.swift",
+                                                    [(5, "ROR", ">", "Killed")]))
+        args = ["judge", "--config", self.config_path, "--repo", self.repo.path, "--out", self.result_path,
+                "--report", f"Wallet={self.report_path}"]
+        self.assertNotEqual(gate.main(args), gate.EXIT_PASS)
 
     def test_module_in_scope_without_report_is_incomplete(self):
         self.assertEqual(self.judge_cli("Killed", extra_reports=False), gate.EXIT_INCOMPLETE)

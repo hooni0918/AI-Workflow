@@ -292,7 +292,8 @@ def _components(path):
 def resolve_report_path(key, repo, roots, known_files):
     # 보고서의 파일 키를 저장소 기준 상대 경로로 바꾼다. 도구마다 절대 경로·프로젝트 기준·잘린
     # 경로(심볼릭 링크 경로 길이 차로 앞이 잘리는 도구 버그 실측)가 섞여 있어, 실제 파일 목록과
-    # 경로 끝부분이 가장 길게 일치하는 것을 고른다. 동률이면 판정하지 않는다(None).
+    # 경로 끝부분이 가장 길게 일치하는 것을 고른다. 동률이거나, 키에 폴더가 있는데 파일 이름만
+    # 맞으면 판정하지 않는다(None) — 이름만 같은 다른 파일의 변이가 섞이면 결과가 거짓이 된다.
     real_repo = os.path.realpath(repo)
     candidates = []
     if os.path.isabs(key):
@@ -317,7 +318,7 @@ def resolve_report_path(key, repo, roots, known_files):
             best, best_len, tie = rel, common, False
         elif common == best_len and common > 0:
             tie = True
-    if best is None or tie:
+    if best is None or tie or best_len < min(2, len(key_parts)):
         return None
     return best
 
@@ -731,18 +732,24 @@ def write_result(path, result):
         handle.write("\n")
 
 
-def known_logic_files(repo, config):
-    files = []
-    for module in config["modules"]:
-        files.extend(_module_logic_files(repo, module, config))
-    return files
+def _module_report_files(repo, module, config):
+    # 보고서 키를 맞춰 볼 후보. 검사 제외(ignore) 파일까지 넣는다 — 빼면 제외 파일의 키가 이름이
+    # 비슷한 검사 대상 파일로 잘못 연결된다. 연결된 제외 파일의 변이는 범위 밖이라 판정에 들지 않는다.
+    files = set()
+    for rel_dir in [module["path"]] + module["sources"]:
+        for dirpath, dirnames, filenames in os.walk(os.path.join(repo, rel_dir)):
+            dirnames[:] = [d for d in dirnames if not d.startswith(".")]  # .build 등 도구 산출물
+            for filename in filenames:
+                path = os.path.relpath(os.path.join(dirpath, filename), repo).replace(os.sep, "/")
+                if _is_logic(path, config):
+                    files.add(path)
+    return sorted(files)
 
 
 def judge_reports(repo, config_path, config, plan, reports, module_errors=None):
     # reports: {모듈 이름: 결과 파일 경로}. 범위가 있는 모듈의 결과가 없으면 미완료다.
     module_errors = module_errors or {}
     decisions, invalid = load_decisions(os.path.join(repo, config["decisions"]))
-    known = known_logic_files(repo, config)
     mutants, counts, extra, missing = [], {}, [], []
     for module in config["modules"]:
         name = module["name"]
@@ -753,13 +760,17 @@ def judge_reports(repo, config_path, config, plan, reports, module_errors=None):
             missing.append(name)
             continue
         try:
-            loaded, _ = load_report(reports[name], repo, [os.path.join(repo, module["path"])], known,
-                                    config["tool"]["status_map"])
+            loaded, unmapped = load_report(reports[name], repo, [os.path.join(repo, module["path"])],
+                                           _module_report_files(repo, module, config),
+                                           config["tool"]["status_map"])
         except IncompleteError as error:
             # 한 모듈의 결과가 깨져도 결과 파일은 남긴다 — CI 산출물로 사유를 볼 수 있어야 한다
             extra.append(f"모듈 {name}: {error}")
             missing.append(name)
             continue
+        # 어느 파일인지 모르는 결과는 버리지 않는다 — 그 안의 생존 변이가 조용히 사라진다
+        extra.extend(f"모듈 {name}: 결과의 파일 경로를 저장소 파일에 연결할 수 없습니다: {key}"
+                     for key in unmapped)
         mutants.extend(loaded)
         counts[name] = len(loaded)
     judged = judge(repo, plan, mutants, counts, decisions, skip_modules=missing,
