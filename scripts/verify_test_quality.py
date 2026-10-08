@@ -970,5 +970,45 @@ class RunTests(unittest.TestCase):
         self.assertEqual(code, gate.EXIT_INCOMPLETE)
 
 
+PROTECT_HOOK = os.path.join(_HERE, "..", "deploy", "hooks", "check_test_quality_protect.py")
+
+
+class ProtectHookTests(unittest.TestCase):
+    # 판단 기록·설정·결과를 AI 가 고치려 하면 허락을 받는지 실제 훅 프로세스로 확인한다
+    def decision_of(self, tool_name, tool_input):
+        proc = subprocess.run([sys.executable, PROTECT_HOOK],
+                              input=json.dumps({"tool_name": tool_name, "tool_input": tool_input}),
+                              capture_output=True, text=True, check=True)
+        if not proc.stdout.strip():
+            return None
+        return json.loads(proc.stdout)["hookSpecificOutput"]["permissionDecision"]
+
+    def test_editing_decisions_asks(self):
+        self.assertEqual(self.decision_of("Edit", {"file_path": "/app/.test-quality/decisions.json"}), "ask")
+
+    def test_writing_result_asks(self):
+        self.assertEqual(self.decision_of("Write", {"file_path": "/app/.test-quality/result.json"}), "ask")
+
+    def test_editing_other_files_passes(self):
+        self.assertIsNone(self.decision_of("Edit", {"file_path": "/app/Sources/Wallet.swift"}))
+
+    def test_reading_is_not_blocked(self):
+        self.assertIsNone(self.decision_of("Read", {"file_path": "/app/.test-quality/decisions.json"}))
+
+    def test_standalone_gate_run_passes(self):
+        command = ("python3 ~/.claude/skills/test-quality/scripts/mutation_gate.py run "
+                   "--config .test-quality/config.json --out .test-quality/result.json")
+        self.assertIsNone(self.decision_of("Bash", {"command": command}))
+
+    def test_gate_run_chained_with_write_asks(self):
+        command = ("python3 mutation_gate.py run --config .test-quality/config.json --out r.json; "
+                   "echo '{}' > .test-quality/decisions.json")
+        self.assertEqual(self.decision_of("Bash", {"command": command}), "ask")
+
+    def test_shell_write_to_tool_config_asks(self):
+        command = "printf 'disabled-mutators: [RelationalOperatorReplacement]' > .swift-mutation-testing.yml"
+        self.assertEqual(self.decision_of("Bash", {"command": command}), "ask")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)

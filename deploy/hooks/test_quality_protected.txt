@@ -1,0 +1,13 @@
+# 변이 검사(test-quality) 판정을 바꿀 수 있는 파일. AI가 고치려 하면 Claude는 허락 창을 띄우고 Codex는 막는다.
+#
+# - 판단 기록: "사람이 승인한 기록만 해소"가 기준이라, AI가 승인자까지 채우면 자기 승인이 된다
+# - 검사 설정·도구 설정: ignore·모듈 범위·변이 종류를 줄이면 검사가 조용히 줄어든다
+# - 결과 파일: 손으로 고치면 통과를 위조할 수 있다. 게이트(mutation_gate.py) 단독 실행은 묻지 않는다
+#
+# 표기: 한 줄에 경로 조각 하나. 도구 입력(파일 경로·명령)에 이 조각이 들어 있으면 보호 대상으로 본다.
+# 빈 줄과 # 주석은 무시. 이 파일이 없으면 아무것도 보호하지 않는다.
+
+.test-quality/decisions.json
+.test-quality/config.json
+.test-quality/result.json
+.swift-mutation-testing.yml
