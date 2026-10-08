@@ -1058,6 +1058,10 @@ class ProtectHookTests(unittest.TestCase):
         decisions = "*** Begin Patch\n*** Update File: .test-quality/decisions.json\n@@\n-a\n+b\n*** End Patch"
         self.assertEqual(self.decision_of("apply_patch", {"command": decisions}), "ask")
 
+    def test_ci_workflow_is_protected(self):
+        # continue-on-error 를 넣으면 미해결이 있어도 필수 상태 검사가 초록이 된다
+        self.assertEqual(self.decision_of("Edit", {"file_path": "/app/.github/workflows/test-quality.yml"}), "ask")
+
     def test_other_tools_are_not_inspected(self):
         plan = {"plan": [{"step": "fill .test-quality/decisions.json", "status": "pending"}]}
         self.assertIsNone(self.decision_of("update_plan", plan))
