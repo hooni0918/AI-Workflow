@@ -532,6 +532,21 @@ def _in_scope(mutant, lines):
     return any(mutant["start_line"] <= n <= mutant["end_line"] for n in lines)
 
 
+def _mask_multiline_strings(source):
+    # 여러 줄 문자열(""" ... """) 안쪽은 변이 대상이 아니므로 같은 길이의 _ 로 가린다.
+    # 시작 줄이 바뀐 줄 밖이어도 안쪽 줄이 가려지도록 파일 처음부터 따라간다.
+    masked, inside = [], False
+    for line in source:
+        parts = line.split('"""')
+        kept = []
+        for index, part in enumerate(parts):
+            kept.append("_" * len(part) if inside else part)
+            if index < len(parts) - 1:
+                inside = not inside
+        masked.append('"""'.join(kept))
+    return masked
+
+
 def _lines_without_mutants(source, lines, in_scope):
     # 변이할 표기가 보이는데 변이가 없는 줄의 (줄, 열, 표기). 바뀐 줄은 줄마다 본다 — 같은 파일에
     # 변이가 하나라도 있으면 파일 단위로는 도구가 일부 줄만 건너뛴 것을 놓친다.
@@ -544,6 +559,7 @@ def _lines_without_mutants(source, lines, in_scope):
     else:
         numbers = lines
     found = []
+    source = _mask_multiline_strings(source)
     for number in numbers:
         if not 0 < number <= len(source):
             continue

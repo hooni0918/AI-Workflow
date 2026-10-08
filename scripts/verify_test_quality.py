@@ -572,6 +572,13 @@ class JudgeTests(unittest.TestCase):
         self.assertEqual(list(found.values()),
                          [None, None, None, None, None, None, None, None, "*", "?", "guard", "false"])
 
+    def test_operators_inside_multiline_string_are_not_mutable(self):
+        path = os.path.join(self.repo, LABELS_PATH)
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write('public enum Labels {\n    public static let help = """\n    if amount > 0 then pay\n    """\n}\n')
+        result = self.judge({WALLET_PATH: [5], LABELS_PATH: [3]}, [mutant(5, "Killed")])
+        self.assertEqual((result["verdict"], result["no_mutants"]), ("pass", [LABELS_PATH]))
+
     def test_only_compile_errors_is_incomplete(self):
         result = self.judge({WALLET_PATH: [5]}, [mutant(5, "CompileError")])
         self.assertEqual(result["verdict"], "incomplete")
