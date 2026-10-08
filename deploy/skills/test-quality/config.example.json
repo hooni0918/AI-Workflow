@@ -14,6 +14,7 @@
       "--no-cache", "--output", "{report}"
     ],
     "timeout_seconds": 7200,
+    "version_command": ["swift-mutation-testing", "--version"],
     "suppression_markers": ["@SwiftMutationTestingDisabled"]
   },
   "modules": [

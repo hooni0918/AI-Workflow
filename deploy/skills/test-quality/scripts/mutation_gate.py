@@ -101,6 +101,11 @@ def load_config(path):
         _require(tool, key, str, "config.tool")
     _check_command(_require(tool, "command", list, "config.tool"), "config.tool.command")
     tool.setdefault("timeout_seconds", 7200)
+    version_command = tool.get("version_command")
+    if version_command is not None and (
+            not isinstance(version_command, list) or not version_command
+            or not all(isinstance(part, str) for part in version_command)):
+        raise ConfigError("config.tool.version_command 는 문자열 목록이어야 합니다")
     markers = tool.setdefault("suppression_markers", [])
     if not isinstance(markers, list) or not all(isinstance(m, str) and m for m in markers):
         raise ConfigError("config.tool.suppression_markers 는 문자열 목록이어야 합니다")
@@ -689,9 +694,27 @@ def run_gate(repo, config_path, config, base, work_dir, overrides):
     plan = plan_scope(repo, config, base)
     tool = config["tool"]
     reports, errors = {}, {}
+    version_error = None
+    if tool.get("version_command") and any(e["targets"] for e in plan["modules"].values()):
+        # 설정과 다른 버전의 도구는 변이 종류가 달라 검사가 조용히 약해질 수 있다(실측: 상위 버전이
+        # 경계·산술 변이를 기본에서 뺐다). 버전이 맞는지 확인되지 않으면 미완료다.
+        log_path = os.path.join(work_dir, "tool.version.log")
+        try:
+            command = [expand(part, dict(overrides, repo=repo)) for part in tool["version_command"]]
+            code = _run_logged(command, repo, 60, log_path)
+            with open(log_path, encoding="utf-8") as handle:
+                output = handle.read().split("\n", 2)[-1]  # 명령·exit 머리줄은 빼고 본다
+            exact = re.compile(r"(?<![\w.])" + re.escape(tool["version"]) + r"(?![\w.])")
+            if code != 0 or not exact.search(output):
+                version_error = f"도구 버전이 설정({tool['version']})과 다릅니다 — {log_path} 참고"
+        except IncompleteError as error:
+            version_error = f"도구 버전을 확인하지 못했습니다: {error}"
     for module in config["modules"]:
         name = module["name"]
         if not plan["modules"][name]["targets"]:
+            continue
+        if version_error:
+            errors[name] = f"모듈 {name}: {version_error}"
             continue
         module_path = os.path.join(repo, module["path"])
         report = os.path.join(work_dir, f"{name}.stryker.json")

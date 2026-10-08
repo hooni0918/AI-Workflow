@@ -636,6 +636,24 @@ class RunTests(unittest.TestCase):
                           "--out", self.result_path, "--work-dir", self.work_dir])
         self.assertEqual(code, gate.EXIT_PASS)
 
+    def run_with_version(self, printed, expected="1.5.1"):
+        config = base_config()
+        config["tool"]["version"] = expected
+        config["tool"]["command"] = [sys.executable, self.fake, "{report}", "Killed"]
+        config["tool"]["version_command"] = [sys.executable, "-c", f"print('tool {printed} [arm64]')"]
+        config_path = os.path.join(self.outside.name, "config.json")
+        write_json(config_path, config)
+        return gate.main(["run", "--config", config_path, "--repo", self.repo.path,
+                          "--out", self.result_path, "--work-dir", self.work_dir])
+
+    def test_matching_tool_version_passes(self):
+        self.assertEqual(self.run_with_version("1.5.1"), gate.EXIT_PASS)
+
+    def test_other_tool_version_is_incomplete(self):
+        # 소스 빌드는 0.0.0-dev 를, 상위 버전은 1.5.10 을 찍는다 — 둘 다 1.5.1 이 아니다
+        self.assertEqual(self.run_with_version("0.0.0-dev"), gate.EXIT_INCOMPLETE)
+        self.assertEqual(self.run_with_version("1.5.10"), gate.EXIT_INCOMPLETE)
+
     def test_tool_timeout_is_incomplete(self):
         code, _ = self.run_gate("sleep", timeout=1)
         self.assertEqual(code, gate.EXIT_INCOMPLETE)
