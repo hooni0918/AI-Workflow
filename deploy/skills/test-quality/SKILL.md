@@ -26,7 +26,7 @@ argument-hint: "[run | verify]"
    - **미해결**: 항목마다 원본 요구사항과 대조한다
      - 테스트 누락·약한 단언이면 테스트를 보강한다. 기대값은 요구사항 근거로 정하고 현재 구현의 동작을 옮겨 적지 않는다
      - 요구사항에 답이 없으면 사용자에게 질문한다. 기대값을 지어내지 않는다
-     - 결과가 같은 변이·멈춤·충돌이면 판단 기록 초안(`key`·`file`·`line_text`·`kind`·`reason`)을 근거와 함께 사용자에게 제안한다. `approved_by`는 사용자가 채운다
+     - 결과가 같은 변이·멈춤·충돌, 변이 대상이 아닌 표기면 판단 기록 초안(`key`·`file`·`line_text`·`kind`·`reason`)을 근거와 함께 사용자에게 제안한다. `approved_by`는 사용자가 채운다
    - **미완료**: 출력의 사유(기준 테스트 실패·도구 미설치·설정 밖 변경 등)를 해소하고 다시 실행한다
 3. 보강·결정이 끝날 때마다 다시 실행해 미해결 0건까지 반복한다
 4. 그 뒤 코드가 또 바뀌었으면 `scripts/mutation_gate.py verify --config <설정> --result .test-quality/result.json`로 결과가 지금 코드에 유효한지 확인한다. 0이 아니면 1번부터 다시 한다
@@ -37,7 +37,7 @@ argument-hint: "[run | verify]"
 
 - 위치: 설정의 `decisions` 경로 (기본 `.test-quality/decisions.json`, 앱 레포에 커밋)
 - 형식: `{"version": 1, "decisions": [{"key", "file", "line_text", "kind", "reason", "approved_by"}]}`. `key`·`file`·`line_text`는 실행 출력의 미해결 항목에서 옮긴다(`key=` 값, 파일 경로, 그 아래 줄 내용). 셋이 모두 실제 변이와 맞아야 해소된다
-- `kind`와 해소할 수 있는 상태: `equivalent`(Survived·NoCoverage), `hang_detected`(Timeout), `crash_detected`(RuntimeError), `ignore_approved`(Ignored)
+- `kind`와 해소할 수 있는 상태: `equivalent`(Survived·NoCoverage), `hang_detected`(Timeout), `crash_detected`(RuntimeError), `ignore_approved`(Ignored), `no_mutant_expected`(NoMutant — 실행기가 올린 변이 없음)
 - 근거나 승인자가 빈 기록은 해소로 치지 않는다
 - 판단 기록·검사 설정·결과 파일을 고치려 하면 보호 훅이 사용자 허락을 받는다. 허락 창은 사용자가 근거·승인자·범위를 확인하는 자리다
 
