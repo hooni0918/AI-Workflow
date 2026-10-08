@@ -461,11 +461,34 @@ class JudgeTests(unittest.TestCase):
         result = self.judge({WALLET_PATH: [5]}, [], counts={"Wallet": 0})
         self.assertEqual(result["verdict"], "incomplete")
 
-    def test_missing_results_for_line_with_operators_is_incomplete(self):
+    def test_changed_line_with_operators_but_no_mutant_is_unresolved(self):
         # 실측: 도구가 대상 파일을 분석하지 않고 변이 0개·점수 100% 를 낸 경우
         result = self.judge({WALLET_PATH: [5], LABELS_PATH: "all"},
                             [mutant(1, "Killed", path=LABELS_PATH)])
-        self.assertEqual(result["verdict"], "incomplete")
+        self.assertEqual(result["verdict"], "fail")
+        self.assertEqual([(m["status"], m["start_line"]) for m in result["unresolved"]], [("NoMutant", 5)])
+
+    def test_skipped_line_is_caught_even_when_file_has_other_mutants(self):
+        # 같은 파일 다른 줄에 변이가 있어도, 바뀐 7행(return true)에 변이가 없으면 올린다
+        result = self.judge({WALLET_PATH: [5, 7]}, [mutant(5, "Killed")])
+        self.assertEqual(result["verdict"], "fail")
+        self.assertEqual([(m["status"], m["start_line"], m["original"]) for m in result["unresolved"]],
+                         [("NoMutant", 7, "true")])
+
+    def test_approved_no_mutant_decision_resolves(self):
+        first = self.judge({WALLET_PATH: [5, 7]}, [mutant(5, "Killed")])["unresolved"][0]
+        entry = {"key": first["key"], "file": first["file"], "line_text": first["line_text"],
+                 "kind": "no_mutant_expected", "reason": "도구가 이 표기를 변이하지 않는다", "approved_by": "reviewer"}
+        result = self.judge({WALLET_PATH: [5, 7]}, [mutant(5, "Killed")], [entry])
+        self.assertEqual(result["verdict"], "pass")
+        wrong_kind = dict(entry, kind="equivalent")
+        self.assertEqual(self.judge({WALLET_PATH: [5, 7]}, [mutant(5, "Killed")], [wrong_kind])["verdict"], "fail")
+
+    def test_whole_file_target_is_checked_per_file_not_per_line(self):
+        # 넓힘·이동으로 파일 전체가 대상이면 바뀌지 않은 줄까지 줄마다 올리지 않는다
+        self.assertEqual(self.judge({WALLET_PATH: "all"}, [mutant(5, "Killed")])["verdict"], "pass")
+        result = self.judge({WALLET_PATH: "all"}, [], counts={"Wallet": 1})
+        self.assertEqual([(m["status"], m["start_line"]) for m in result["unresolved"]], [("NoMutant", 5)])
 
     def test_file_without_mutable_operators_is_not_applicable_file(self):
         result = self.judge({WALLET_PATH: [5], LABELS_PATH: [2]}, [mutant(5, "Killed")])
@@ -478,6 +501,24 @@ class JudgeTests(unittest.TestCase):
             handle.write("// balance >= amount\npublic enum Labels {}\n")
         result = self.judge({WALLET_PATH: [5], LABELS_PATH: [1]}, [mutant(5, "Killed")])
         self.assertEqual(result["verdict"], "pass")
+
+    def test_mutable_token_ignores_strings_comments_and_operator_names(self):
+        found = {line: (gate._mutable_token(line) or (None, None))[1] for line in (
+            '    let url = "https://a.b/c == d"',
+            "    static func == (lhs: A, rhs: A) -> Bool {",
+            '    let name = "a" + suffix',
+            "    let x = a ?? b",
+            "    if let x = y {",
+            "#if DEBUG",
+            "    } while running",
+            "     * block comment > text",
+            "    let total = price * quantity",
+            "    let v = cond ? 1 : 2",
+            "    guard isValid else { return }",
+            "    var isOn = false // toggle",
+        )}
+        self.assertEqual(list(found.values()),
+                         [None, None, None, None, None, None, None, None, "*", "?", "guard", "false"])
 
     def test_only_compile_errors_is_incomplete(self):
         result = self.judge({WALLET_PATH: [5]}, [mutant(5, "CompileError")])

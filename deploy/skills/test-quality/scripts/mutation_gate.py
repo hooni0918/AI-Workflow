@@ -373,6 +373,7 @@ DECISION_KINDS = {
     "hang_detected": {"Timeout"},
     "crash_detected": {"RuntimeError"},
     "ignore_approved": {"Ignored"},
+    "no_mutant_expected": {"NoMutant"},
 }
 
 HINTS = {
@@ -381,14 +382,43 @@ HINTS = {
     "Timeout": "제한 시간을 늘려 다시 돌리거나, 변이가 무한 반복을 만든 근거를 판단 기록으로 남긴다",
     "RuntimeError": "다시 돌려도 같으면 근거를 판단 기록으로 남긴다",
     "Ignored": "제외 주석·설정을 걷어내거나, 승인된 판단 기록을 남긴다",
+    "NoMutant": ("변이할 표기가 보이는데 도구가 이 줄에 변이를 만들지 않았다 — 도구 설정·제외 표식을 "
+                 "확인하고, 변이 대상이 아닌 표기(타입 제약 등)면 승인된 판단 기록을 남긴다"),
 }
 
 AMBIGUOUS_HINT = ("같은 모양의 변이가 같은 자리에 여럿이라 판단 기록 하나로 구분할 수 없다 — "
                   "테스트로 잡거나 코드를 구분되게 고친다")
 
-# 바뀐 줄에 이런 연산자가 보이는데 그 파일 변이가 하나도 없으면, 도구가 파일을 분석했다는
-# 근거가 없다고 본다. Swift·Dart 공통 표기만 쓴다.
-_MUTABLE_TOKEN = re.compile(r"==|!=|>=|<=|&&|\|\|| > | < |\btrue\b|\bfalse\b")
+# 바뀐 줄에 이런 표기가 보이는데 그 줄 변이가 없으면, 도구가 그 줄을 분석했다는 근거가 없다고 본다.
+# swift-mutation-testing v1.5.1 기본 변이 종류(관계·논리·불리언·산술·조건 부정·삼항)를 따르고
+# Swift·Dart 공통 표기만 쓴다. 단독 호출 제거는 함수 본문의 유일한 문장이면 도구가 건너뛰어
+# 줄만 보고는 가를 수 없으므로 넣지 않는다.
+_MUTABLE_TOKEN = re.compile(
+    r"==|!=|>=|<=|&&|\|\|| > | < |\btrue\b|\bfalse\b"
+    r'|(?<!")\s[-+*/%]\s(?!")'  # 산술. 문자열을 잇는 + 는 도구가 변이하지 않는다
+    r"|\s\?\s"  # 삼항
+    r"|(?<!#)\b(?:if|guard|while)\s+(?!let\b|var\b|case\b|#)")  # 조건 부정. 값 묶기·패턴·#if 는 아니다
+_STRING_LITERAL = re.compile(r'"(?:[^"\\\n]|\\.)*"')
+_OPERATOR_DECL = re.compile(r"\b(?:func|operator)\s*[-=!<>+*/%&|^~?.]+")
+
+
+def _mutable_token(line):
+    # 줄에서 변이 대상으로 보이는 첫 표기의 (열, 표기). 없으면 None.
+    # 문자열 내용·연산자 함수 이름(func ==)·주석은 변이 대상이 아니므로 같은 길이로 가린 뒤 찾는다.
+    if line.lstrip().startswith(("//", "/*", "*")):
+        return None
+    masked = _STRING_LITERAL.sub(lambda m: '"' + "_" * (len(m.group(0)) - 2) + '"', line)
+    masked = _OPERATOR_DECL.sub(lambda m: "_" * len(m.group(0)), masked)
+    comment = masked.find("//")
+    if comment >= 0:
+        masked = masked[:comment]
+    for match in _MUTABLE_TOKEN.finditer(masked):
+        text = match.group(0)
+        # repeat { } while 조건은 조건 목록이 아니라 도구가 부정하지 않는다
+        if text.startswith("while") and masked[:match.start()].rstrip().endswith("}"):
+            continue
+        return match.start() + len(text) - len(text.lstrip()), text.split()[0]
+    return None
 
 
 def _read_lines(repo, rel):
@@ -458,8 +488,27 @@ def _in_scope(mutant, lines):
     return any(mutant["start_line"] <= n <= mutant["end_line"] for n in lines)
 
 
-def _code_part(line):
-    return line.split("//", 1)[0]
+def _lines_without_mutants(source, lines, in_scope):
+    # 변이할 표기가 보이는데 변이가 없는 줄의 (줄, 열, 표기). 바뀐 줄은 줄마다 본다 — 같은 파일에
+    # 변이가 하나라도 있으면 파일 단위로는 도구가 일부 줄만 건너뛴 것을 놓친다.
+    # 파일 전체가 대상이면(넓힘·이동) 바뀌지 않은 줄까지 줄마다 올리지 않고, 파일에 변이가
+    # 하나도 없을 때 첫 줄만 올린다.
+    if lines == "all":
+        if in_scope:
+            return []
+        numbers = range(1, len(source) + 1)
+    else:
+        numbers = lines
+    found = []
+    for number in numbers:
+        if not 0 < number <= len(source):
+            continue
+        token = _mutable_token(source[number - 1])
+        if token and not any(m["start_line"] <= number <= m["end_line"] for m in in_scope):
+            found.append((number, token[0], token[1]))
+            if lines == "all":
+                break
+    return found
 
 
 def suppression_items(repo, plan, markers):
@@ -512,14 +561,14 @@ def judge(repo, plan, mutants, module_mutant_counts, decisions, skip_modules=(),
             file_mutants = [m for m in mutants if m["file"] == path]
             in_scope = [m for m in file_mutants if _in_scope(m, lines)]
             result["out_of_scope"] += len(file_mutants) - len(in_scope)
+            missing = _lines_without_mutants(_read_lines(repo, path), lines, in_scope)
+            for number, column, token in missing:
+                item = {"file": path, "start_line": number, "start_column": column + 1, "end_line": number,
+                        "mutator": "NoMutant", "original": token, "replacement": "", "status": "NoMutant"}
+                key, text = mutant_key(repo, item, cache)
+                pending.append(dict(item, key=key, line_text=text, hint=HINTS["NoMutant"]))
             if not in_scope:
-                source = _read_lines(repo, path)
-                numbers = range(1, len(source) + 1) if lines == "all" else lines
-                if any(_MUTABLE_TOKEN.search(_code_part(source[n - 1]))
-                       for n in numbers if 0 < n <= len(source)):
-                    result["incomplete_reasons"].append(
-                        f"{path}: 바뀐 줄에 변이할 연산자가 보이는데 결과가 없습니다")
-                else:
+                if not missing:
                     result["no_mutants"].append(path)
                 continue
             for mutant in in_scope:
@@ -662,7 +711,10 @@ def print_result(result, out=sys.stdout):
         print(f"  미완료: {reason}", file=out)
     for item in result["unresolved"]:
         # 한 줄에 같은 종류 연산자가 여럿일 수 있어 원래 표기와 열 번호를 함께 보인다
-        change = f"{item.get('original') or '?'} → {item['replacement'] or '(삭제)'}"
+        if item["mutator"] == "NoMutant":
+            change = f"{item['original']} 에 변이 없음"
+        else:
+            change = f"{item.get('original') or '?'} → {item['replacement'] or '(삭제)'}"
         print(f"  미해결 {item['file']}:{item['start_line']}:{item.get('start_column', '?')} "
               f"{item['mutator']} {change} [{item['status']}] key={item['key']}\n"
               f"      {item['line_text']}\n      {item['hint']}", file=out)
