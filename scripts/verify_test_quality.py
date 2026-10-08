@@ -408,9 +408,9 @@ class JudgeTests(unittest.TestCase):
         return gate.judge(self.repo, one_module_plan(targets, unmapped), list(mutants), counts, list(decisions))
 
     def decision(self, m, kind="equivalent", **extra):
-        key, _ = gate.mutant_key(self.repo, m)
-        entry = {"key": key, "kind": kind, "reason": "앞 분기가 같은 값을 이미 걸러 동작이 같다",
-                 "approved_by": "reviewer"}
+        key, line_text = gate.mutant_key(self.repo, m)
+        entry = {"key": key, "file": m["file"], "line_text": line_text, "kind": kind,
+                 "reason": "앞 분기가 같은 값을 이미 걸러 동작이 같다", "approved_by": "reviewer"}
         entry.update(extra)
         return entry
 
@@ -508,13 +508,54 @@ class JudgeTests(unittest.TestCase):
         result = gate.judge(self.repo, plan, [mutant(6, "Killed")], {"Wallet": 1}, [approval], suppressions=found)
         self.assertEqual(result["verdict"], "pass")
 
-    def test_suppression_marker_in_comment_is_ignored(self):
+    def test_suppression_marker_after_slashes_in_string_is_found(self):
+        # 리뷰 재현: 같은 줄 앞쪽 문자열에 // 가 있으면 뒤의 표식을 놓쳤다. 주석 속 표기도 올리는 쪽이 안전하다
         path = os.path.join(self.repo, WALLET_PATH)
         with open(path, "w", encoding="utf-8") as handle:
-            handle.write("// @SwiftMutationTestingDisabled 는 쓰지 않는다\n" + WALLET)
+            handle.write('@available(*, deprecated, message: "see https://wiki") @SwiftMutationTestingDisabled\n'
+                         + WALLET)
         found = gate.suppression_items(self.repo, one_module_plan({WALLET_PATH: [6]}),
                                        ["@SwiftMutationTestingDisabled"])
-        self.assertEqual(found, [])
+        self.assertEqual([s["start_line"] for s in found], [1])
+
+    def test_one_suppression_approval_does_not_cover_a_new_marker(self):
+        path = os.path.join(self.repo, WALLET_PATH)
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write("@SwiftMutationTestingDisabled\nfunc legacy() {}\n\n"
+                         "@SwiftMutationTestingDisabled\nfunc refund() {}\n")
+        plan = one_module_plan({WALLET_PATH: [4, 5]})
+        found = gate.suppression_items(self.repo, plan, ["@SwiftMutationTestingDisabled"])
+        approval = self.decision(found[0], kind="ignore_approved")
+        result = gate.judge(self.repo, plan, [mutant(1, "Killed")], {"Wallet": 1}, [approval], suppressions=found)
+        self.assertEqual([i["start_line"] for i in result["resolved"]], [1])
+        self.assertEqual([i["start_line"] for i in result["unresolved"]], [4])
+
+    def test_approval_does_not_transfer_to_same_shaped_line_elsewhere(self):
+        # 리뷰 재현: guard 줄이 같은 다른 함수를 추가하면 기존 equivalent 승인이 새 변이까지 해소했다
+        path = os.path.join(self.repo, WALLET_PATH)
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write("func clampA(_ v: Int) -> Int {\n    guard v >= 0 else { return 0 }\n    return v\n}\n"
+                         "func clampB(_ v: Int) -> Int {\n    guard v >= 0 else { return 0 }\n    return v + 1\n}\n")
+        old = mutant(2, "Survived", column=13)
+        new = mutant(6, "Survived", column=13)
+        result = self.judge({WALLET_PATH: [5, 6, 7, 8]}, [new], [self.decision(old)])
+        self.assertEqual(result["verdict"], "fail")
+
+    def test_identical_spots_cannot_be_resolved_by_one_decision(self):
+        path = os.path.join(self.repo, WALLET_PATH)
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write("let a = x >= 0\n" * 5)
+        twins = [mutant(2, "Survived", column=11), mutant(4, "Survived", column=11)]
+        self.assertEqual(gate.mutant_key(self.repo, twins[0])[0], gate.mutant_key(self.repo, twins[1])[0])
+        result = self.judge({WALLET_PATH: "all"}, twins + [mutant(3, "Killed", column=11)],
+                            [self.decision(twins[0])])
+        self.assertEqual(len(result["unresolved"]), 2)
+        self.assertIn("구분할 수 없다", result["unresolved"][0]["hint"])
+
+    def test_decision_with_mismatched_line_text_does_not_resolve(self):
+        m = mutant(5, "Survived")
+        result = self.judge({WALLET_PATH: [5]}, [m], [self.decision(m, line_text="다른 줄")])
+        self.assertEqual(result["verdict"], "fail")
 
     def test_decision_without_approver_is_rejected(self):
         tmp = os.path.join(self.repo, "decisions.json")

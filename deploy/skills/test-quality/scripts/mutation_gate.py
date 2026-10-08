@@ -383,6 +383,9 @@ HINTS = {
     "Ignored": "제외 주석·설정을 걷어내거나, 승인된 판단 기록을 남긴다",
 }
 
+AMBIGUOUS_HINT = ("같은 모양의 변이가 같은 자리에 여럿이라 판단 기록 하나로 구분할 수 없다 — "
+                  "테스트로 잡거나 코드를 구분되게 고친다")
+
 # 바뀐 줄에 이런 연산자가 보이는데 그 파일 변이가 하나도 없으면, 도구가 파일을 분석했다는
 # 근거가 없다고 본다. Swift·Dart 공통 표기만 쓴다.
 _MUTABLE_TOKEN = re.compile(r"==|!=|>=|<=|&&|\|\|| > | < |\btrue\b|\bfalse\b")
@@ -396,9 +399,19 @@ def _read_lines(repo, rel):
         return []
 
 
+def _neighbor(lines, index, step):
+    i = index + step
+    while 0 <= i < len(lines):
+        if lines[i].strip():
+            return lines[i].strip()
+        i += step
+    return ""
+
+
 def mutant_key(repo, mutant, cache=None):
-    # 판단 기록을 줄 번호가 아니라 원래 줄 내용에 묶는다. 위쪽 코드가 바뀌어 줄 번호가 밀려도
-    # 기록이 따라가고, 그 줄 자체가 바뀌면 기록이 떨어져 다시 판단하게 된다.
+    # 판단 기록을 줄 번호가 아니라 원래 줄과 그 앞뒤 줄 내용에 묶는다. 위쪽 코드가 바뀌어 줄 번호가
+    # 밀려도 기록이 따라가고, 그 자리가 바뀌면 기록이 떨어져 다시 판단하게 된다. 앞뒤 줄을 넣는 것은
+    # 같은 모양의 줄(guard·return 등)을 다른 함수에 새로 써도 기존 승인이 옮겨 붙지 않게 하기 위해서다.
     if cache is not None and mutant["file"] in cache:
         lines = cache[mutant["file"]]
     else:
@@ -409,7 +422,8 @@ def mutant_key(repo, mutant, cache=None):
     text = lines[index] if 0 <= index < len(lines) else ""
     stripped = text.strip()
     column = mutant["start_column"] - (len(text) - len(text.lstrip()))
-    raw = "\0".join([mutant["file"], stripped, str(column), mutant["mutator"], mutant["replacement"]])
+    raw = "\0".join([mutant["file"], _neighbor(lines, index, -1), stripped, _neighbor(lines, index, 1),
+                     str(column), mutant["mutator"], mutant["replacement"]])
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16], stripped
 
 
@@ -426,8 +440,11 @@ def load_decisions(path):
     entries = data.get("decisions", []) if isinstance(data, dict) else []
     valid, invalid = [], []
     for entry in entries:
+        # file·line_text 는 사람이 무엇을 승인하는지 보이게 하려고 필수로 둔다(해시 키만으로는 알 수 없다)
         ok = (isinstance(entry, dict)
               and isinstance(entry.get("key"), str) and entry["key"]
+              and isinstance(entry.get("file"), str) and entry["file"]
+              and isinstance(entry.get("line_text"), str)
               and entry.get("kind") in DECISION_KINDS
               and isinstance(entry.get("reason"), str) and entry["reason"].strip()
               and isinstance(entry.get("approved_by"), str) and entry["approved_by"].strip())
@@ -455,9 +472,10 @@ def suppression_items(repo, plan, markers):
     for entry in plan["modules"].values():
         for path in entry["targets"]:
             for number, line in enumerate(_read_lines(repo, path), start=1):
-                code = _code_part(line)
+                # 주석을 걷어내지 않고 줄 전체에서 찾는다. 같은 줄 앞쪽 문자열에 // 가 있으면 뒤의
+                # 표식을 놓친다(리뷰 재현). 주석 속 표기까지 올라오는 쪽이 판정을 막는 안전한 방향이다.
                 for marker in markers:
-                    column = code.find(marker)
+                    column = line.find(marker)
                     if column >= 0:
                         items.append({"file": path, "start_line": number, "start_column": column + 1,
                                       "end_line": number, "mutator": "Suppression", "original": marker,
@@ -471,6 +489,7 @@ def judge(repo, plan, mutants, module_mutant_counts, decisions, skip_modules=(),
     by_key = {d["key"]: d for d in decisions}
     used_keys = set()
     cache = {}
+    pending = []  # 판단 기록으로만 해소되는 항목 — 모은 뒤 한꺼번에 대조한다
     result = {"detected": [], "unresolved": [], "resolved": [], "invalid_mutants": 0,
               "out_of_scope": 0, "no_mutants": [], "incomplete_reasons": []}
     any_target = False
@@ -516,25 +535,29 @@ def judge(repo, plan, mutants, module_mutant_counts, decisions, skip_modules=(),
                 elif status == "Pending":
                     result["incomplete_reasons"].append(f"{path}:{mutant['start_line']} 변이가 실행되지 않았습니다(Pending)")
                 else:
-                    decision = by_key.get(key)
-                    if decision and status in DECISION_KINDS[decision["kind"]]:
-                        used_keys.add(key)
-                        result["resolved"].append(dict(item, decision=decision))
-                    else:
-                        result["unresolved"].append(dict(item, hint=HINTS[status]))
+                    pending.append(dict(item, hint=HINTS[status]))
         if in_scope_total and in_scope_total == compile_errors:
             result["incomplete_reasons"].append(
                 f"모듈 {name}: 범위 안 변이가 모두 컴파일 실패라 실제로 검사한 것이 없습니다")
 
     for suppression in suppressions:
         key, text = mutant_key(repo, suppression, cache)
-        item = dict(suppression, key=key, line_text=text)
-        decision = by_key.get(key)
-        if decision and decision["kind"] == "ignore_approved":
-            used_keys.add(key)
+        pending.append(dict(suppression, key=key, line_text=text, hint=HINTS["Ignored"]))
+
+    key_counts = {}
+    for item in pending:
+        key_counts[item["key"]] = key_counts.get(item["key"], 0) + 1
+    for item in pending:
+        decision = by_key.get(item["key"])
+        if key_counts[item["key"]] > 1:
+            # 같은 키가 여럿이면 기록 하나가 어느 것을 승인했는지 가를 수 없다 — 해소하지 않는다
+            result["unresolved"].append(dict(item, hint=AMBIGUOUS_HINT))
+        elif (decision and item["status"] in DECISION_KINDS[decision["kind"]]
+              and decision["file"] == item["file"] and decision["line_text"] == item["line_text"]):
+            used_keys.add(item["key"])
             result["resolved"].append(dict(item, decision=decision))
         else:
-            result["unresolved"].append(dict(item, hint=HINTS["Ignored"]))
+            result["unresolved"].append(item)
 
     result["stale_decisions"] = [d["key"] for d in decisions if d["key"] not in used_keys]
     if result["incomplete_reasons"]:
