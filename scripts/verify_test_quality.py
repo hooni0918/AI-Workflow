@@ -970,5 +970,119 @@ class RunTests(unittest.TestCase):
         self.assertEqual(code, gate.EXIT_INCOMPLETE)
 
 
+PROTECT_HOOK = os.path.join(_HERE, "..", "deploy", "hooks", "check_test_quality_protect.py")
+
+
+class ProtectHookTests(unittest.TestCase):
+    # 판단 기록·설정·결과를 AI 가 고치려 하면 허락을 받는지 실제 훅 프로세스로 확인한다
+    def decision_of(self, tool_name, tool_input, cwd="/app"):
+        payload = {"tool_name": tool_name, "tool_input": tool_input, "cwd": cwd}
+        proc = subprocess.run([sys.executable, PROTECT_HOOK], input=json.dumps(payload),
+                              capture_output=True, text=True, check=True)
+        if not proc.stdout.strip():
+            return None
+        return json.loads(proc.stdout)["hookSpecificOutput"]["permissionDecision"]
+
+    def test_editing_decisions_asks(self):
+        self.assertEqual(self.decision_of("Edit", {"file_path": "/app/.test-quality/decisions.json"}), "ask")
+
+    def test_writing_result_asks(self):
+        self.assertEqual(self.decision_of("Write", {"file_path": "/app/.test-quality/result.json"}), "ask")
+
+    def test_editing_other_files_passes(self):
+        self.assertIsNone(self.decision_of("Edit", {"file_path": "/app/Sources/Wallet.swift"}))
+
+    def test_reading_is_not_blocked(self):
+        self.assertIsNone(self.decision_of("Read", {"file_path": "/app/.test-quality/decisions.json"}))
+
+    def test_standalone_gate_run_passes(self):
+        command = ("python3 ~/.claude/skills/test-quality/scripts/mutation_gate.py run "
+                   "--config .test-quality/config.json --out .test-quality/result.json")
+        self.assertIsNone(self.decision_of("Bash", {"command": command}))
+
+    def test_gate_run_chained_with_write_asks(self):
+        command = ("python3 mutation_gate.py run --config .test-quality/config.json --out r.json; "
+                   "echo '{}' > .test-quality/decisions.json")
+        self.assertEqual(self.decision_of("Bash", {"command": command}), "ask")
+
+    def test_shell_write_to_tool_config_asks(self):
+        command = "printf 'disabled-mutators: [RelationalOperatorReplacement]' > .swift-mutation-testing.yml"
+        self.assertEqual(self.decision_of("Bash", {"command": command}), "ask")
+
+    def test_common_gate_output_handling_passes(self):
+        # 게이트는 오래 걸려 출력을 돌리기 쉽다 — 보호 경로가 아닌 곳으로의 리다이렉트·파이프는 묻지 않는다
+        gate_run = "python3 mutation_gate.py run --config .test-quality/config.json --out .test-quality/result.json"
+        for command in (gate_run + " 2>&1 | tail -n 80", gate_run + " > /tmp/tq.log 2>&1",
+                        "python3 mutation_gate.py verify --config .test-quality/config.json "
+                        "--result .test-quality/result.json"):
+            self.assertIsNone(self.decision_of("Bash", {"command": command}), command)
+
+    def test_gate_judge_is_not_exempt(self):
+        command = ("python3 mutation_gate.py judge --config .test-quality/config.json "
+                   "--report Wallet=hand.json --out .test-quality/result.json")
+        self.assertEqual(self.decision_of("Bash", {"command": command}), "ask")
+
+    def test_read_only_and_staging_commands_pass(self):
+        for command in ("git add .test-quality/decisions.json", "git -C /app add .test-quality/decisions.json",
+                        "cat .test-quality/result.json > /tmp/r.json", "git diff -- .test-quality",
+                        "grep -n key .test-quality/decisions.json | head"):
+            self.assertIsNone(self.decision_of("Bash", {"command": command}), command)
+
+    def test_description_is_not_inspected(self):
+        payload = {"command": "git status", "description": "Check .test-quality/result.json staging"}
+        self.assertIsNone(self.decision_of("Bash", payload))
+
+    def test_indirect_shell_writes_ask(self):
+        # 리뷰 재현: 폴더 지정·cd·코드로 만든 경로·git 복원
+        for command in ("cp /tmp/d.json .test-quality/", "mv /tmp/draft/config.json .test-quality/",
+                        "cd .test-quality && sed -i '' s/a/b/ decisions.json",
+                        "python3 -c \"import pathlib; (pathlib.Path('.test-quality')/'decisions.json').write_text('x')\"",
+                        "python3 - <<'EOF'\nimport os\nopen(os.path.join('.test-quality', 'decisions.json'), 'w')\nEOF",
+                        "git checkout origin/main -- .test-quality", "echo x | tee .test-quality/decisions.json",
+                        "git show main:x > .test-quality/decisions.json"):
+            self.assertEqual(self.decision_of("Bash", {"command": command}), "ask", command)
+
+    def test_shell_inside_protected_dir_asks(self):
+        self.assertEqual(self.decision_of("Bash", {"command": "sed -i '' s/a/b/ decisions.json"},
+                                          cwd="/app/.test-quality"), "ask")
+        self.assertIsNone(self.decision_of("Bash", {"command": "cat decisions.json"}, cwd="/app/.test-quality"))
+
+    def test_monitor_command_is_inspected(self):
+        command = "cp /tmp/d.json .test-quality/decisions.json; echo done"
+        self.assertEqual(self.decision_of("Monitor", {"command": command}), "ask")
+
+    def test_codex_patch_checks_only_file_headers(self):
+        # Codex apply_patch 는 패치 본문 전체를 command 로 보낸다. 본문에 경로가 나온다고 막으면 안 된다
+        gitignore = "*** Begin Patch\n*** Update File: .gitignore\n@@\n+.test-quality/result.json\n*** End Patch"
+        self.assertIsNone(self.decision_of("apply_patch", {"command": gitignore}))
+        decisions = "*** Begin Patch\n*** Update File: .test-quality/decisions.json\n@@\n-a\n+b\n*** End Patch"
+        self.assertEqual(self.decision_of("apply_patch", {"command": decisions}), "ask")
+
+    def test_tree_wide_git_asks_only_in_repo_with_test_quality(self):
+        # 경로 없이 작업 트리 전체를 바꾸는 git 명령은 보호 파일도 바꾼다. 다른 레포에서는 묻지 않는다
+        with tempfile.TemporaryDirectory() as app, tempfile.TemporaryDirectory() as other:
+            for root in (app, other):
+                os.makedirs(os.path.join(root, ".git"))
+            os.makedirs(os.path.join(app, ".test-quality"))
+            os.makedirs(os.path.join(app, "Sources"))
+            commands = ("git apply /tmp/x.patch", "git stash pop", "git reset --hard",
+                        "git checkout -- .", "git restore .")
+            for command in commands:
+                self.assertEqual(self.decision_of("Bash", {"command": command}, cwd=os.path.join(app, "Sources")),
+                                 "ask", command)
+                self.assertIsNone(self.decision_of("Bash", {"command": command}, cwd=other), command)
+            self.assertEqual(self.decision_of("Bash", {"command": f"git -C {app} stash pop"}, cwd=other), "ask")
+            for command in ("git checkout main", "git stash", "git reset --soft HEAD~1"):
+                self.assertIsNone(self.decision_of("Bash", {"command": command}, cwd=app), command)
+
+    def test_ci_workflow_is_protected(self):
+        # continue-on-error 를 넣으면 미해결이 있어도 필수 상태 검사가 초록이 된다
+        self.assertEqual(self.decision_of("Edit", {"file_path": "/app/.github/workflows/test-quality.yml"}), "ask")
+
+    def test_other_tools_are_not_inspected(self):
+        plan = {"plan": [{"step": "fill .test-quality/decisions.json", "status": "pending"}]}
+        self.assertIsNone(self.decision_of("update_plan", plan))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)
