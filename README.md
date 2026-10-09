@@ -118,6 +118,7 @@ make verify-hooks       # hook이 올바르게 연결됐는지 확인
 ### 리뷰
 
 - [code-review](deploy/skills/code-review/README.md): 코드 변경을 [coding-standards](deploy/contexts/coding-standards/README.md)와 품질 기준으로 리뷰하고 고칠 거리 목록 산출
+- [test-quality](deploy/skills/test-quality/README.md): 바뀐 로직에 변이 검사를 돌려 테스트가 실제 오류를 잡는지 확인하고, 잡지 못한 변화를 0건까지 수렴 (초안 — [STATUS](deploy/skills/test-quality/STATUS.md))
 
 ### 커뮤니케이션
 

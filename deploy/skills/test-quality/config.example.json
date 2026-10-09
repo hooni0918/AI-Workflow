@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "base": "origin/main",
+  "source_extensions": [".swift"],
+  "ignore": ["App/**"],
+  "tool": {
+    "name": "swift-mutation-testing",
+    "version": "1.5.1",
+    "command": [
+      "swift-mutation-testing", "{module_path}",
+      "--scheme", "{scheme}", "--destination", "{destination}",
+      "--sources-path", "{sources_path}",
+      "--no-cache", "--output", "{report}"
+    ],
+    "timeout_seconds": 7200,
+    "version_command": ["swift-mutation-testing", "--version"],
+    "status_map": {"Unviable": "CompileError", "Crash": "RuntimeError"},
+    "suppression_markers": ["@SwiftMutationTestingDisabled"],
+    "config_files": [".swift-mutation-testing.yml"]
+  },
+  "modules": [
+    {
+      "name": "Domain",
+      "path": "Packages/Domain",
+      "sources": ["Packages/Domain/Sources"],
+      "tests": ["Packages/Domain/Tests"],
+      "fingerprint": ["Packages/Domain/Package.swift"],
+      "baseline": ["xcodebuild", "test", "-scheme", "{scheme}", "-destination", "{destination}"],
+      "vars": {"scheme": "Domain", "destination": "{env:TQ_DESTINATION}"}
+    },
+    {
+      "name": "Networking",
+      "path": "Packages/Networking",
+      "sources": ["Packages/Networking/Sources"],
+      "tests": ["Packages/Networking/Tests"],
+      "fingerprint": ["Packages/Networking/Package.swift"],
+      "baseline": ["swift", "test", "--package-path", "{module_path}"],
+      "command": [
+        "swift-mutation-testing", "{module_path}",
+        "--sources-path", "{sources_path}",
+        "--no-cache", "--output", "{report}"
+      ]
+    }
+  ]
+}
